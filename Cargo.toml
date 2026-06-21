@@ -1,0 +1,20 @@
+[package]
+name = "neurogate-limit-watch"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+authors = ["xodapi"]
+description = "Safe NeuroGate quota monitor for Codex/Droid workflows"
+repository = "https://github.com/xodapi/neurogate-limit-watch"
+readme = "README.md"
+keywords = ["neurogate", "codex", "droid", "limits", "monitoring"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "nglimit"
+path = "src/main.rs"
+
+[dependencies]
+chrono = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde_json = "1"

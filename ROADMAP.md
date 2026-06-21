@@ -1,0 +1,38 @@
+# Roadmap / План улучшений
+
+This file keeps public improvement ideas in one place. Please discuss and vote
+in GitHub Discussions:
+
+https://github.com/xodapi/neurogate-limit-watch/discussions
+
+## High Impact / Самое полезное
+
+- `--notify`: local desktop notification when a window reaches warning/danger.
+- `--threshold 5h=80,7d=90`: custom thresholds per window.
+- `--format compact`: one-line output for status bars, Droid widgets, tmux, and CI logs.
+- Better `/v1/me` schema tolerance when NeuroGate adds new groups or model rows.
+- PowerShell install script and uninstall script for Windows users.
+
+## Droid / Termux
+
+- Termux install guide.
+- Termux:Widget example that runs `nglimit --demo` or `nglimit --json`.
+- Optional Android notification through Termux:API.
+
+## abtop / Agent Monitoring
+
+- Show NeuroGate quota status next to local `abtop --status-json` agent usage.
+- Add examples for Codex, Claude Code, Droid, and Cursor workflows.
+- Keep all local paths, prompts, session IDs, and tool calls out of exported JSON.
+
+## Native Binaries / Нативные бинарники
+
+The project is now Rust-first. The next release goal is to publish binaries for:
+
+- `x86_64-pc-windows-msvc`
+- `x86_64-unknown-linux-gnu`
+- `aarch64-apple-darwin`
+- Termux/Android target after the build recipe is verified
+
+Русский: проект теперь Rust-first. Основная цель релизов — один бинарник без
+Python, pip, venv и runtime-зависимостей.

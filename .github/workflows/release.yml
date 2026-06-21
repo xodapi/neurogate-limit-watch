@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            binary: nglimit
+          - os: windows-latest
+            asset: x86_64-pc-windows-msvc
+            archive: zip
+            binary: nglimit.exe
+          - os: macos-latest
+            asset: aarch64-apple-darwin
+            archive: tar.gz
+            binary: nglimit
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          name="nglimit-${GITHUB_REF_NAME}-${{ matrix.asset }}"
+          mkdir -p "dist/${name}"
+          cp "target/release/${{ matrix.binary }}" "dist/${name}/"
+          cp README.md README.ru.md LICENSE "dist/${name}/"
+          tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+          shasum -a 256 "dist/${name}.tar.gz" > "dist/${name}.tar.gz.sha256"
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "nglimit-${env:GITHUB_REF_NAME}-${{ matrix.asset }}"
+          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
+          Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
+          Copy-Item README.md,README.ru.md,LICENSE "dist/$name/"
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
+          $hash = Get-FileHash "dist/$name.zip" -Algorithm SHA256
+          "$($hash.Hash.ToLower())  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/*
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          cat > notes.md <<'EOF'
+          Rust CLI release.
+
+          Highlights:
+          - Single native binary per platform.
+          - No Python, pip, venv, or runtime package dependencies.
+          - `--demo` works without a NeuroGate key or network.
+          - `--mock`, `--json`, `--watch`, `--fail-on`, and `--with-abtop` are supported.
+          - English and Russian docs are included.
+          EOF
+          gh release create "$TAG" release-assets/**/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "neurogate-limit-watch ${TAG}" \
+            --notes-file notes.md \
+            --latest

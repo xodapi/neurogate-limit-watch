@@ -1,11 +1,16 @@
 # neurogate-limit-watch
 
-Safe NeuroGate quota monitor for Codex/Droid workflows.
+[English](README.md) | [Русский](README.ru.md)
+
+[![CI](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml)
+
+Single-binary Rust CLI for safely checking NeuroGate quota usage in
+Codex/Droid/Claude/Cursor workflows.
 
 `nglimit` polls NeuroGate `GET /v1/me`, summarizes credit/request usage for
 5-hour, 24-hour, 7-day, and 30-day windows, and can merge local
-`abtop --status-json` agent status. It is designed for quick terminal checks,
-CI guards, and future mobile/widget integrations.
+`abtop --status-json` agent status. It is built as a native executable, so
+users do not need Python, pip, venv, Node, or API SDK dependencies.
 
 ![demo](assets/demo.svg)
 
@@ -16,26 +21,59 @@ session running or whether they are about to hit NeuroGate limits. The tool is
 small, local-first, and intentionally avoids storing API keys or logging
 private prompts.
 
-## Install
+## NeuroGate Referral Bonus
 
-Requirements: Python 3.10+.
+Optional: new NeuroGate users can register with this referral link and receive
+`$5` on their account:
+
+https://portal.neurogate.space/invite?ref=cbvBMDP06DSwPL9u
+
+The referral link is not required to use this project. The CLI does not send
+referral data anywhere.
+
+## Download
+
+Release binaries:
+
+https://github.com/xodapi/neurogate-limit-watch/releases
+
+Pick the archive for your platform, unpack it, then run:
+
+```bash
+nglimit --version
+nglimit --demo
+```
+
+Windows PowerShell:
+
+```powershell
+.\nglimit.exe --version
+.\nglimit.exe --demo
+```
+
+## Build From Source
+
+Requirements: Rust stable.
 
 ```bash
 git clone https://github.com/xodapi/neurogate-limit-watch.git
 cd neurogate-limit-watch
-python -m pip install -e .
+cargo build --release --locked
 ```
 
-No dependencies are required.
+Binary location:
 
-On Windows, if `python` opens the Microsoft Store launcher, use `py -3`
-instead:
-
-```powershell
-py -3 -m pip install -e .
-```
+- Windows: `target/release/nglimit.exe`
+- Linux/macOS: `target/release/nglimit`
 
 ## Usage
+
+Try without a key or network:
+
+```bash
+nglimit --demo
+nglimit --demo --json
+```
 
 Use a real NeuroGate key:
 
@@ -46,19 +84,19 @@ nglimit --json
 nglimit --with-abtop
 ```
 
-Try it without a key:
-
-```bash
-python -m nglimit --mock tests/fixtures/me.json
-python -m nglimit --mock tests/fixtures/me.json --json
-```
-
-Windows PowerShell equivalent:
+Windows PowerShell:
 
 ```powershell
 $env:NEUROGATE_API_KEY = "YOUR_NEUROGATE_API_KEY"
-nglimit
-py -3 -m nglimit --mock tests\fixtures\me.json
+.\nglimit.exe
+.\nglimit.exe --json
+```
+
+Mock a saved `/v1/me` payload:
+
+```bash
+nglimit --mock tests/fixtures/me.json
+nglimit --mock tests/fixtures/me.json --json
 ```
 
 Watch mode:
@@ -126,38 +164,41 @@ CLI options:
 nglimit --help
 ```
 
-## Uninstall
+## Discussions
 
-```bash
-python -m pip uninstall neurogate-limit-watch
-```
+Ideas, feature requests, and NeuroGate/Codex/Droid workflow notes are welcome
+in GitHub Discussions:
 
-Then remove the cloned directory if you no longer need it.
+https://github.com/xodapi/neurogate-limit-watch/discussions
+
+See [ROADMAP.md](ROADMAP.md) for the current improvement backlog.
 
 ## Supported OS
 
 - Windows
 - macOS
 - Linux
-- Android/Termux should work with Python 3.10+; `--with-abtop` requires an
-  `abtop` build available in `PATH`.
+- Android/Termux should work from source with Rust installed; prebuilt Termux
+  binaries are on the roadmap.
 
 ## Tests
 
 ```bash
-python -m unittest discover -s tests -v
+cargo test --locked
+cargo run --locked -- --demo --json
 ```
 
 ## Contest status
 
 What works:
 
+- Native Rust CLI.
 - NeuroGate `/v1/me` polling.
 - 5h / 24h / 7d / 30d credit and request windows.
 - Human output and JSON output.
-- Mock mode for demos without a key.
+- Demo/mock mode without a key.
 - Optional local abtop integration.
-- Basic tests.
+- CI and release workflow for native binaries.
 
 Not ready yet:
 

@@ -1,0 +1,38 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. You can write in English or Russian.
+
+        Спасибо за идею. Можно писать на русском или английском.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Боль
+      description: What workflow problem should this solve?
+      placeholder: "Example: I want to see NeuroGate 5h quota in a Droid widget."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal / Идея
+      description: What should the tool do?
+      placeholder: "Example: Add a compact JSON field for widget color and text."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / Область
+      options:
+        - NeuroGate limits
+        - Codex
+        - Droid / Termux
+        - abtop integration
+        - Install / setup
+        - Security / privacy
+        - Other
+    validations:
+      required: true

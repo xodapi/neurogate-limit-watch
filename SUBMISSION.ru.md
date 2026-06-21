@@ -4,44 +4,80 @@
 neurogate-limit-watch
 
 Что делает:
-Показывает текущий расход лимитов NeuroGate по окнам 5 часов, 24 часа, 7 дней и 30 дней через безопасный polling `GET /v1/me`. Умеет выводить человекочитаемый статус, JSON для виджетов/автоматизаций и опционально добавлять локальный статус AI-агентов из `abtop --status-json`.
+Нативная Rust CLI-утилита одним бинарником. Показывает текущий расход лимитов
+NeuroGate по окнам 5 часов, 24 часа, 7 дней и 30 дней через безопасный polling
+`GET /v1/me`. Умеет выводить человекочитаемый статус, JSON для
+виджетов/автоматизаций и опционально добавлять локальный статус AI-агентов из
+`abtop --status-json`.
 
 Для кого полезно:
-Для пользователей NeuroGate, которые работают через Codex, Droid, Claude Code, Cursor или другие OpenAI-compatible клиенты и хотят заранее видеть риск упереться в лимиты.
+Для пользователей NeuroGate, которые работают через Codex, Droid, Claude Code,
+Cursor или другие OpenAI-compatible клиенты и хотят заранее видеть риск
+упереться в лимиты.
 
 GitHub:
 https://github.com/xodapi/neurogate-limit-watch
 
+Релизы:
+https://github.com/xodapi/neurogate-limit-watch/releases
+
+Обсуждения и идеи:
+https://github.com/xodapi/neurogate-limit-watch/discussions
+
+Бонус для новых пользователей NeuroGate:
+Регистрация по ссылке дает новому пользователю $5 на счет:
+https://portal.neurogate.space/invite?ref=cbvBMDP06DSwPL9u
+
 Как запустить:
+Скачать архив под свою ОС из GitHub Releases, распаковать и выполнить:
+
+```bash
+nglimit --version
+nglimit --demo
+```
+
+Windows:
+
+```powershell
+.\nglimit.exe --version
+.\nglimit.exe --demo
+```
+
+Из исходников:
+
 ```bash
 git clone https://github.com/xodapi/neurogate-limit-watch.git
 cd neurogate-limit-watch
-python -m pip install -e .
-export NEUROGATE_API_KEY="ваш_ключ"
-nglimit
+cargo build --release --locked
+target/release/nglimit --demo
 ```
 
-Без ключа для проверки:
+С реальным ключом:
+
 ```bash
-python -m nglimit --mock tests/fixtures/me.json
-python -m nglimit --mock tests/fixtures/me.json --json
+export NEUROGATE_API_KEY="ваш_ключ"
+nglimit
+nglimit --json
 ```
 
 Какие ОС поддерживаются:
-Windows, macOS, Linux. Android/Termux должен работать при наличии Python 3.10+.
+Windows, macOS, Linux. Android/Termux планируется как отдельный build-рецепт.
 
 Что уже работает:
+- Нативный Rust CLI без Python/pip/venv.
 - Polling NeuroGate `/v1/me`.
 - Расчет credit/request usage для 5h / 24h / 7d / 30d.
 - Human output и JSON output.
-- Mock-режим без ключа и сети.
+- Demo/mock-режим без ключа и сети.
 - Опциональная интеграция с `abtop --status-json`.
-- Базовые тесты и GitHub Actions CI.
+- CI и release workflow для бинарников.
 
 Что ещё не готово:
 - Нативный Android UI.
+- Termux prebuilt binary.
 - Push-уведомления, потому что публичного webhook/SSE для лимитов сейчас нет.
-- Статистика по отдельным API-ключам, если NeuroGate не отдаёт ее через публичный `/v1/*` endpoint.
+- Статистика по отдельным API-ключам, если NeuroGate не отдаёт ее через
+  публичный `/v1/*` endpoint.
 
 Скрин/видео:
 `assets/demo.svg`
