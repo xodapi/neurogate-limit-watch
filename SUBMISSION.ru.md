@@ -43,6 +43,9 @@ Windows:
 .\nglimit.exe --demo
 ```
 
+Если запускать двойным кликом из Explorer, окно не закрывается сразу. Для
+простого запуска в Windows-архиве также есть `nglimit-open.cmd`.
+
 Из исходников:
 
 ```bash
@@ -73,6 +76,7 @@ Windows, macOS, Linux. Android/Termux планируется как отдель
 - Human output и JSON output.
 - Compact output для виджетов/status bar.
 - `.env` рядом с бинарником или в рабочей директории.
+- Windows double-click mode без мгновенного закрытия окна.
 - Настраиваемые пороги `--warning` / `--danger`.
 - Demo/mock-режим без ключа и сети.
 - Опциональная интеграция с `abtop --status-json`.

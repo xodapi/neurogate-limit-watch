@@ -51,6 +51,10 @@ Windows PowerShell:
 .\nglimit.exe --demo
 ```
 
+If you double-click `nglimit.exe` in Explorer, the Windows console will stay
+open after the command finishes. The Windows archive also includes
+`nglimit-open.cmd`, a double-click helper that always pauses at the end.
+
 ## .env Next To The Binary
 
 You can keep the NeuroGate API key in a local `.env` file next to `nglimit`
@@ -82,6 +86,12 @@ Windows PowerShell:
 Copy-Item .env.example .env
 notepad .env
 .\nglimit.exe --compact
+```
+
+Double-click option on Windows:
+
+```text
+nglimit-open.cmd
 ```
 
 Lookup order:

@@ -49,6 +49,10 @@ Windows PowerShell:
 .\nglimit.exe --demo
 ```
 
+Если запустить `nglimit.exe` двойным кликом из Explorer, Windows-консоль
+останется открытой после завершения команды. В Windows-архив также входит
+`nglimit-open.cmd`: helper для двойного клика, который всегда делает паузу.
+
 ## .env рядом с бинарником
 
 Ключ NeuroGate можно держать в локальном `.env` рядом с `nglimit` или в
@@ -80,6 +84,12 @@ Windows PowerShell:
 Copy-Item .env.example .env
 notepad .env
 .\nglimit.exe --compact
+```
+
+Вариант для двойного клика на Windows:
+
+```text
+nglimit-open.cmd
 ```
 
 Порядок поиска:

@@ -3,6 +3,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
@@ -76,13 +77,40 @@ struct RuntimeConfig {
 }
 
 fn main() {
-    std::process::exit(match real_main() {
+    let code = match real_main() {
         Ok(code) => code,
         Err(message) => {
             eprintln!("nglimit: {message}");
             2
         }
-    });
+    };
+    pause_before_exit_if_own_console();
+    std::process::exit(code);
+}
+
+#[cfg(windows)]
+fn pause_before_exit_if_own_console() {
+    if windows_console_process_count() <= 1 {
+        eprintln!();
+        eprint!("Press Enter to exit...");
+        let _ = io::stderr().flush();
+        let mut line = String::new();
+        let _ = io::stdin().read_line(&mut line);
+    }
+}
+
+#[cfg(not(windows))]
+fn pause_before_exit_if_own_console() {}
+
+#[cfg(windows)]
+fn windows_console_process_count() -> u32 {
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetConsoleProcessList(process_list: *mut u32, process_count: u32) -> u32;
+    }
+
+    let mut processes = [0_u32; 8];
+    unsafe { GetConsoleProcessList(processes.as_mut_ptr(), processes.len() as u32) }
 }
 
 fn real_main() -> Result<i32, String> {

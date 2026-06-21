@@ -52,6 +52,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
           Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/$name/"
+          Copy-Item packaging/windows/nglimit-open.cmd "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
           $hash = Get-FileHash "dist/$name.zip" -Algorithm SHA256
           "$($hash.Hash.ToLower())  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
