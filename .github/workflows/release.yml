@@ -84,8 +84,10 @@ jobs:
           - `--mock`, `--json`, `--watch`, `--fail-on`, and `--with-abtop` are supported.
           - English and Russian docs are included.
           EOF
-          gh release create "$TAG" release-assets/**/* \
+          gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "neurogate-limit-watch ${TAG}" \
             --notes-file notes.md \
             --latest
+          find release-assets -type f -print0 \
+            | xargs -0 gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber
