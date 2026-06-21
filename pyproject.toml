@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neurogate-limit-watch"
+version = "0.1.0"
+description = "Safe NeuroGate quota monitor for Codex/Droid workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "xodapi" }]
+keywords = ["neurogate", "codex", "droid", "limits", "monitoring"]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.scripts]
+nglimit = "nglimit.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nglimit*"]

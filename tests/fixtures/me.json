@@ -1,0 +1,31 @@
+{
+  "id": "usr_demo",
+  "usage": {
+    "rows": [
+      {
+        "model": "gpt-5.5",
+        "creditLimit5Hours": 50,
+        "creditLimit24Hours": 180,
+        "creditLimit7Days": 600,
+        "creditLimit30Days": 2000,
+        "requestLimit5Hours": 1000,
+        "requestLimit24Hours": 4000,
+        "requestLimit7Days": 20000,
+        "requestLimit30Days": 80000,
+        "credits5Hours": 39,
+        "credits24Hours": 91,
+        "credits7Days": 214,
+        "credits30Days": 819,
+        "requests5Hours": 610,
+        "requests24Hours": 1510,
+        "requests7Days": 8300,
+        "requests30Days": 26000,
+        "window5HoursEndsAt": "2026-06-21T18:30:00Z",
+        "window24HoursEndsAt": "2026-06-22T10:00:00Z",
+        "window7DaysEndsAt": "2026-06-27T10:00:00Z",
+        "window30DaysEndsAt": "2026-07-20T10:00:00Z"
+      }
+    ]
+  }
+}
+
