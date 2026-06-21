@@ -84,10 +84,19 @@ jobs:
           - `--mock`, `--json`, `--watch`, `--fail-on`, and `--with-abtop` are supported.
           - English and Russian docs are included.
           EOF
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "neurogate-limit-watch ${TAG}" \
-            --notes-file notes.md \
-            --latest
-          find release-assets -type f -print0 \
-            | xargs -0 gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "neurogate-limit-watch ${TAG}" \
+              --notes-file notes.md \
+              --latest
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "neurogate-limit-watch ${TAG}" \
+              --notes-file notes.md \
+              --latest
+          fi
+          while IFS= read -r -d '' file; do
+            gh release upload "$TAG" "$file" --repo "$GITHUB_REPOSITORY" --clobber
+          done < <(find release-assets -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sha256' \) -print0)
