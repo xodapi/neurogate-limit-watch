@@ -343,6 +343,7 @@ fn run_monitor(args: &Args) -> Result<i32, String> {
     let mut last_error = None::<String>;
     let mut force_refresh = true;
     let mut next_refresh = Instant::now();
+    let mut frame = MonitorFrame::default();
 
     loop {
         let now = Instant::now();
@@ -366,7 +367,7 @@ fn run_monitor(args: &Args) -> Result<i32, String> {
         let next_refresh_secs = next_refresh
             .saturating_duration_since(Instant::now())
             .as_secs();
-        draw_monitor_screen(
+        frame.draw(
             last_snapshot.as_ref(),
             last_error.as_deref(),
             interval_secs,
@@ -423,37 +424,68 @@ impl Drop for TerminalGuard {
     }
 }
 
-fn draw_monitor_screen(
-    snapshot: Option<&StatusSnapshot>,
-    error: Option<&str>,
-    interval_secs: u64,
-    next_refresh_secs: u64,
-    with_abtop: bool,
-    warning_threshold: f64,
-) -> Result<(), String> {
-    let (width, height) = terminal::size().unwrap_or((100, 30));
-    let content = render_monitor(
-        snapshot,
-        error,
-        width,
-        height,
-        interval_secs,
-        next_refresh_secs,
-        with_abtop,
-        warning_threshold,
-    );
-    let mut stdout = io::stdout();
-    execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
-        .map_err(|error| format!("cannot redraw monitor: {error}"))?;
-    stdout
-        .write_all(content.as_bytes())
-        .map_err(|error| format!("cannot write monitor output: {error}"))?;
-    stdout
-        .flush()
-        .map_err(|error| format!("cannot flush monitor output: {error}"))?;
-    Ok(())
+#[derive(Default)]
+struct MonitorFrame {
+    lines: Vec<String>,
+    size: Option<(u16, u16)>,
 }
 
+impl MonitorFrame {
+    fn draw(
+        &mut self,
+        snapshot: Option<&StatusSnapshot>,
+        error: Option<&str>,
+        interval_secs: u64,
+        next_refresh_secs: u64,
+        with_abtop: bool,
+        warning_threshold: f64,
+    ) -> Result<(), String> {
+        let (width, height) = terminal::size().unwrap_or((100, 30));
+        let mut stdout = io::stdout();
+        if self.size != Some((width, height)) {
+            execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
+                .map_err(|error| format!("cannot resize monitor frame: {error}"))?;
+            self.lines.clear();
+            self.size = Some((width, height));
+        }
+
+        let next = render_monitor_lines(
+            snapshot,
+            error,
+            width,
+            height,
+            interval_secs,
+            next_refresh_secs,
+            with_abtop,
+            warning_threshold,
+        );
+        if next == self.lines {
+            return Ok(());
+        }
+
+        let max_lines = next.len().max(self.lines.len());
+        for index in 0..max_lines {
+            if next.get(index) == self.lines.get(index) {
+                continue;
+            }
+            let row = index as u16;
+            execute!(stdout, MoveTo(0, row), Clear(ClearType::CurrentLine))
+                .map_err(|error| format!("cannot redraw monitor line: {error}"))?;
+            if let Some(line) = next.get(index) {
+                stdout
+                    .write_all(line.as_bytes())
+                    .map_err(|error| format!("cannot write monitor output: {error}"))?;
+            }
+        }
+        stdout
+            .flush()
+            .map_err(|error| format!("cannot flush monitor output: {error}"))?;
+        self.lines = next;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
 fn render_monitor(
     snapshot: Option<&StatusSnapshot>,
     error: Option<&str>,
@@ -464,6 +496,29 @@ fn render_monitor(
     with_abtop: bool,
     warning_threshold: f64,
 ) -> String {
+    render_monitor_lines(
+        snapshot,
+        error,
+        width,
+        height,
+        interval_secs,
+        next_refresh_secs,
+        with_abtop,
+        warning_threshold,
+    )
+    .join("\r\n")
+}
+
+fn render_monitor_lines(
+    snapshot: Option<&StatusSnapshot>,
+    error: Option<&str>,
+    width: u16,
+    height: u16,
+    interval_secs: u64,
+    next_refresh_secs: u64,
+    with_abtop: bool,
+    warning_threshold: f64,
+) -> Vec<String> {
     let width = usize::from(width.max(20));
     let max_lines = usize::from(height.max(10));
     let mut lines = Vec::<String>::new();
@@ -620,7 +675,6 @@ fn render_monitor(
         .take(max_lines)
         .map(|line| fit_text(&line, width))
         .collect::<Vec<_>>()
-        .join("\r\n")
 }
 
 fn panel_top(title: &str, width: usize) -> String {

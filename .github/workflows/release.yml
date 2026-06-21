@@ -84,6 +84,7 @@ jobs:
           - `--demo` works without a NeuroGate key or network.
           - `--mock`, `--json`, `--watch`, `--fail-on`, and `--with-abtop` are supported.
           - `--monitor` provides an abtop-style live dashboard.
+          - Monitor redraws changed lines instead of clearing the whole screen.
           - English and Russian docs are included.
           EOF
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
