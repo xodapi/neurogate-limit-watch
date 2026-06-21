@@ -9,6 +9,7 @@ https://github.com/xodapi/neurogate-limit-watch/discussions
 
 - `--notify`: local desktop notification when a window reaches warning/danger.
 - Per-window thresholds like `5h=80,7d=90`.
+- Monitor presets/layouts for very narrow Droid/Termux terminals.
 - More compact presets for Droid widgets, tmux, and CI logs.
 - Better `/v1/me` schema tolerance when NeuroGate adds new groups or model rows.
 - PowerShell install script and uninstall script for Windows users.
@@ -21,7 +22,8 @@ https://github.com/xodapi/neurogate-limit-watch/discussions
 
 ## abtop / Agent Monitoring
 
-- Show NeuroGate quota status next to local `abtop --status-json` agent usage.
+- Expand the new `--monitor` dashboard with ports/process panes when safe
+  privacy-preserving local sources are available.
 - Add examples for Codex, Claude Code, Droid, and Cursor workflows.
 - Keep all local paths, prompts, session IDs, and tool calls out of exported JSON.
 

@@ -7,8 +7,8 @@ neurogate-limit-watch
 Нативная Rust CLI-утилита одним бинарником. Показывает текущий расход лимитов
 NeuroGate по окнам 5 часов, 24 часа, 7 дней и 30 дней через безопасный polling
 `GET /v1/me`. Умеет выводить человекочитаемый статус, JSON для
-виджетов/автоматизаций и опционально добавлять локальный статус AI-агентов из
-`abtop --status-json`.
+виджетов/автоматизаций, полноэкранный live-monitor в стиле `abtop` и
+опционально добавлять локальный статус AI-агентов из `abtop --status-json`.
 
 Для кого полезно:
 Для пользователей NeuroGate, которые работают через Codex, Droid, Claude Code,
@@ -64,6 +64,7 @@ cp .env.example .env
 nglimit
 nglimit --json
 nglimit --compact
+nglimit --monitor --with-abtop
 ```
 
 Какие ОС поддерживаются:
@@ -75,6 +76,8 @@ Windows, macOS, Linux. Android/Termux планируется как отдель
 - Расчет credit/request usage для 5h / 24h / 7d / 30d.
 - Human output и JSON output.
 - Compact output для виджетов/status bar.
+- Full-screen live monitor в стиле abtop: quota, alerts, reset timers,
+  remaining credits/requests, hotkeys `r`, `q`, `Esc`.
 - `.env` рядом с бинарником или в рабочей директории.
 - Windows double-click mode без мгновенного закрытия окна.
 - Настраиваемые пороги `--warning` / `--danger`.

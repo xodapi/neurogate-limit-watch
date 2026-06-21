@@ -52,7 +52,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
           Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/$name/"
-          Copy-Item packaging/windows/nglimit-open.cmd "dist/$name/"
+          Copy-Item packaging/windows/*.cmd "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
           $hash = Get-FileHash "dist/$name.zip" -Algorithm SHA256
           "$($hash.Hash.ToLower())  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
@@ -83,6 +83,7 @@ jobs:
           - No Python, pip, venv, or runtime package dependencies.
           - `--demo` works without a NeuroGate key or network.
           - `--mock`, `--json`, `--watch`, `--fail-on`, and `--with-abtop` are supported.
+          - `--monitor` provides an abtop-style live dashboard.
           - English and Russian docs are included.
           EOF
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then

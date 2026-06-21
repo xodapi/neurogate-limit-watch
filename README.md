@@ -8,7 +8,8 @@ Single-binary Rust CLI for safely checking NeuroGate quota usage in
 Codex/Droid/Claude/Cursor workflows.
 
 `nglimit` polls NeuroGate `GET /v1/me`, summarizes credit/request usage for
-5-hour, 24-hour, 7-day, and 30-day windows, and can merge local
+5-hour, 24-hour, 7-day, and 30-day windows, includes an abtop-style live
+terminal monitor, and can merge local
 `abtop --status-json` agent status. It is built as a native executable, so
 users do not need Python, pip, venv, Node, or API SDK dependencies.
 
@@ -42,6 +43,7 @@ Pick the archive for your platform, unpack it, then run:
 ```bash
 nglimit --version
 nglimit --demo
+nglimit --demo --monitor
 ```
 
 Windows PowerShell:
@@ -49,11 +51,13 @@ Windows PowerShell:
 ```powershell
 .\nglimit.exe --version
 .\nglimit.exe --demo
+.\nglimit.exe --demo --monitor
 ```
 
 If you double-click `nglimit.exe` in Explorer, the Windows console will stay
 open after the command finishes. The Windows archive also includes
-`nglimit-open.cmd`, a double-click helper that always pauses at the end.
+`nglimit-open.cmd`, a double-click helper that always pauses at the end, and
+`nglimit-monitor.cmd` for launching the live monitor directly.
 
 ## .env Next To The Binary
 
@@ -92,6 +96,7 @@ Double-click option on Windows:
 
 ```text
 nglimit-open.cmd
+nglimit-monitor.cmd
 ```
 
 Lookup order:
@@ -157,6 +162,19 @@ Watch mode:
 nglimit --watch 60 --with-abtop
 ```
 
+Live monitor:
+
+```bash
+nglimit --monitor
+nglimit --monitor --watch 10
+nglimit --monitor --with-abtop
+```
+
+In monitor mode, press `r` to refresh immediately and `q` or `Esc` to quit.
+It renders an abtop-style dashboard with NeuroGate quota windows, warning
+alerts, reset timers, remaining credits/requests, and optional local
+Codex/Claude agent context from `abtop --status-json`.
+
 CI/automation threshold:
 
 ```bash
@@ -208,6 +226,8 @@ JSON output:
 - `--with-abtop` uses `abtop --status-json`, which is the compact,
   privacy-preserving abtop payload without local paths, prompts, chat text, or
   session IDs.
+- `--monitor` uses the same privacy-safe summaries and keeps the API key out of
+  the terminal output.
 - No telemetry, no external calls except NeuroGate `/v1/me`.
 
 ## Configuration
@@ -257,6 +277,7 @@ What works:
 - 5h / 24h / 7d / 30d credit and request windows.
 - Human output and JSON output.
 - Compact output for widgets/status bars.
+- Full-screen live monitor with `q`/`Esc` quit and `r` refresh.
 - `.env` file next to the binary or working directory.
 - Custom warning/danger thresholds.
 - Demo/mock mode without a key.
