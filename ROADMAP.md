@@ -8,8 +8,8 @@ https://github.com/xodapi/neurogate-limit-watch/discussions
 ## High Impact / Самое полезное
 
 - `--notify`: local desktop notification when a window reaches warning/danger.
-- `--threshold 5h=80,7d=90`: custom thresholds per window.
-- `--format compact`: one-line output for status bars, Droid widgets, tmux, and CI logs.
+- Per-window thresholds like `5h=80,7d=90`.
+- More compact presets for Droid widgets, tmux, and CI logs.
 - Better `/v1/me` schema tolerance when NeuroGate adds new groups or model rows.
 - PowerShell install script and uninstall script for Windows users.
 

@@ -1,7 +1,9 @@
 use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
@@ -24,16 +26,26 @@ enum FailOn {
     Danger,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputMode {
+    Human,
+    Json,
+    Compact,
+}
+
 #[derive(Debug)]
 struct Args {
-    api_base: String,
+    api_base: Option<String>,
     api_key_env: String,
+    env_file: Option<PathBuf>,
     demo: bool,
     mock: Option<String>,
-    json: bool,
+    output: OutputMode,
     with_abtop: bool,
     watch: u64,
     fail_on: FailOn,
+    warning_threshold: f64,
+    danger_threshold: f64,
     help: bool,
     version: bool,
 }
@@ -54,6 +66,13 @@ struct WindowSummary {
     reset_at: Option<String>,
     reset_in_seconds: Option<i64>,
     level: &'static str,
+}
+
+#[derive(Debug)]
+struct RuntimeConfig {
+    api_base: String,
+    api_key: String,
+    abtop_bin: String,
 }
 
 fn main() {
@@ -78,7 +97,9 @@ fn real_main() -> Result<i32, String> {
     }
 
     loop {
-        let code = run_once(&args)?;
+        let dotenv = load_dotenv_for_args(&args)?;
+        let config = runtime_config(&args, &dotenv);
+        let code = run_once(&args, &config)?;
         if args.watch == 0 {
             return Ok(code);
         }
@@ -94,14 +115,17 @@ where
     I: IntoIterator<Item = String>,
 {
     let mut parsed = Args {
-        api_base: env::var("NEUROGATE_API_BASE").unwrap_or_else(|_| DEFAULT_API_BASE.to_string()),
+        api_base: None,
         api_key_env: "NEUROGATE_API_KEY".to_string(),
+        env_file: None,
         demo: false,
         mock: None,
-        json: false,
+        output: OutputMode::Human,
         with_abtop: false,
         watch: 0,
         fail_on: FailOn::Never,
+        warning_threshold: 75.0,
+        danger_threshold: 90.0,
         help: false,
         version: false,
     };
@@ -112,11 +136,23 @@ where
             "-h" | "--help" => parsed.help = true,
             "-V" | "--version" => parsed.version = true,
             "--demo" => parsed.demo = true,
-            "--json" => parsed.json = true,
+            "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
+            "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
             "--with-abtop" => parsed.with_abtop = true,
-            "--api-base" => parsed.api_base = next_value(&mut iter, "--api-base")?,
+            "--api-base" => parsed.api_base = Some(next_value(&mut iter, "--api-base")?),
             "--api-key-env" => parsed.api_key_env = next_value(&mut iter, "--api-key-env")?,
+            "--env-file" => {
+                parsed.env_file = Some(PathBuf::from(next_value(&mut iter, "--env-file")?))
+            }
             "--mock" => parsed.mock = Some(next_value(&mut iter, "--mock")?),
+            "--warning" => {
+                parsed.warning_threshold =
+                    parse_percent(&next_value(&mut iter, "--warning")?, "--warning")?;
+            }
+            "--danger" => {
+                parsed.danger_threshold =
+                    parse_percent(&next_value(&mut iter, "--danger")?, "--danger")?;
+            }
             "--watch" => {
                 let value = next_value(&mut iter, "--watch")?;
                 parsed.watch = value.parse::<u64>().map_err(|_| {
@@ -142,7 +178,28 @@ where
     if parsed.demo && parsed.mock.is_some() {
         return Err("--demo and --mock are mutually exclusive".to_string());
     }
+    if parsed.warning_threshold >= parsed.danger_threshold {
+        return Err("--warning must be lower than --danger".to_string());
+    }
     Ok(parsed)
+}
+
+fn set_output_mode(current: OutputMode, next: OutputMode) -> Result<OutputMode, String> {
+    if current != OutputMode::Human && current != next {
+        return Err("--json and --compact are mutually exclusive".to_string());
+    }
+    Ok(next)
+}
+
+fn parse_percent(value: &str, option: &str) -> Result<f64, String> {
+    let percent = value
+        .trim_end_matches('%')
+        .parse::<f64>()
+        .map_err(|_| format!("{option} must be a percentage number"))?;
+    if !(0.0..=100.0).contains(&percent) {
+        return Err(format!("{option} must be between 0 and 100"));
+    }
+    Ok(percent)
 }
 
 fn next_value<I>(iter: &mut I, option: &str) -> Result<String, String>
@@ -167,46 +224,148 @@ OPTIONS:
       --demo                 Use built-in demo data without a key or network
       --mock <PATH>          Read a saved /v1/me JSON payload instead of calling NeuroGate
       --json                 Print machine-readable JSON
+      --compact              Print one-line output for widgets/status bars
       --with-abtop           Merge local abtop --status-json output if available
       --watch <SECONDS>      Poll every N seconds
       --fail-on <LEVEL>      Exit non-zero on threshold: never, warning, danger
+      --warning <PCT>        Warning threshold percentage [default: 75]
+      --danger <PCT>         Danger threshold percentage [default: 90]
+      --env-file <PATH>      Load .env file explicitly
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
   -V, --version              Print version
   -h, --help                 Print help
+
+.env lookup:
+  1. --env-file <PATH>
+  2. .env in the current directory
+  3. .env next to the nglimit executable
 "
     );
 }
 
-fn run_once(args: &Args) -> Result<i32, String> {
+fn run_once(args: &Args, config: &RuntimeConfig) -> Result<i32, String> {
     let payload = if args.demo {
         demo_payload()
     } else if let Some(path) = &args.mock {
         load_mock(path)?
     } else {
-        let api_key = env::var(&args.api_key_env).unwrap_or_default();
-        fetch_me(&api_key, &args.api_base)?
+        fetch_me(&config.api_key, &config.api_base)?
     };
 
-    let windows = summarize_me(&payload);
+    let windows = summarize_me(&payload, args.warning_threshold, args.danger_threshold);
     let abtop = if args.with_abtop {
-        read_abtop_status()
+        read_abtop_status(&config.abtop_bin)
     } else {
         None
     };
     let status = summary_to_json(&windows, abtop.as_ref());
 
-    if args.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&status)
-                .map_err(|error| format!("cannot render JSON: {error}"))?
-        );
-    } else {
-        print_human(&windows, abtop.as_ref());
+    match args.output {
+        OutputMode::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&status)
+                    .map_err(|error| format!("cannot render JSON: {error}"))?
+            );
+        }
+        OutputMode::Compact => print_compact(&windows, abtop.as_ref()),
+        OutputMode::Human => print_human(&windows, abtop.as_ref()),
     }
 
     Ok(exit_code(&windows, args.fail_on))
+}
+
+fn runtime_config(args: &Args, dotenv: &HashMap<String, String>) -> RuntimeConfig {
+    RuntimeConfig {
+        api_base: args
+            .api_base
+            .clone()
+            .or_else(|| config_value("NEUROGATE_API_BASE", dotenv))
+            .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
+        api_key: config_value(&args.api_key_env, dotenv).unwrap_or_default(),
+        abtop_bin: config_value("ABTOP_BIN", dotenv).unwrap_or_else(|| "abtop".to_string()),
+    }
+}
+
+fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<String> {
+    env::var(key)
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| dotenv.get(key).cloned().filter(|value| !value.is_empty()))
+}
+
+fn load_dotenv_for_args(args: &Args) -> Result<HashMap<String, String>, String> {
+    let Some(path) = find_dotenv(args)? else {
+        return Ok(HashMap::new());
+    };
+    let raw = fs::read_to_string(&path)
+        .map_err(|error| format!("cannot read env file {}: {error}", path.display()))?;
+    parse_dotenv(&raw).map_err(|error| format!("{}: {error}", path.display()))
+}
+
+fn find_dotenv(args: &Args) -> Result<Option<PathBuf>, String> {
+    if let Some(path) = &args.env_file {
+        if path.is_file() {
+            return Ok(Some(path.clone()));
+        }
+        return Err(format!("env file not found: {}", path.display()));
+    }
+
+    let cwd_env = PathBuf::from(".env");
+    if cwd_env.is_file() {
+        return Ok(Some(cwd_env));
+    }
+
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let exe_env = dir.join(".env");
+            if exe_env.is_file() {
+                return Ok(Some(exe_env));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn parse_dotenv(raw: &str) -> Result<HashMap<String, String>, String> {
+    let mut values = HashMap::new();
+    for (index, line) in raw.lines().enumerate() {
+        let mut line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("export ") {
+            line = rest.trim_start();
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            return Err(format!("line {} is not KEY=VALUE", index + 1));
+        };
+        let key = key.trim();
+        if !is_env_key(key) {
+            return Err(format!("line {} has an invalid key", index + 1));
+        }
+        values.insert(key.to_string(), unquote_env_value(value.trim()).to_string());
+    }
+    Ok(values)
+}
+
+fn is_env_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    matches!(chars.next(), Some(first) if first == '_' || first.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+}
+
+fn unquote_env_value(value: &str) -> &str {
+    if value.len() >= 2 {
+        let bytes = value.as_bytes();
+        if (bytes[0] == b'"' && bytes[value.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[value.len() - 1] == b'\'')
+        {
+            return &value[1..value.len() - 1];
+        }
+    }
+    value
 }
 
 fn fetch_me(api_key: &str, api_base: &str) -> Result<Value, String> {
@@ -284,7 +443,11 @@ fn demo_payload() -> Value {
     })
 }
 
-fn summarize_me(payload: &Value) -> Vec<WindowSummary> {
+fn summarize_me(
+    payload: &Value,
+    warning_threshold: f64,
+    danger_threshold: f64,
+) -> Vec<WindowSummary> {
     let rows = extract_usage_rows(payload);
     let now = Utc::now();
     let mut summaries = Vec::new();
@@ -309,7 +472,12 @@ fn summarize_me(payload: &Value) -> Vec<WindowSummary> {
 
         summaries.push(WindowSummary {
             key,
-            level: window_level(credits.as_ref(), requests.as_ref()),
+            level: window_level(
+                credits.as_ref(),
+                requests.as_ref(),
+                warning_threshold,
+                danger_threshold,
+            ),
             credits,
             requests,
             reset_at,
@@ -450,7 +618,12 @@ fn parse_reset(value: Option<&Value>, now: DateTime<Utc>) -> (Option<String>, Op
     }
 }
 
-fn window_level(credits: Option<&MetricSummary>, requests: Option<&MetricSummary>) -> &'static str {
+fn window_level(
+    credits: Option<&MetricSummary>,
+    requests: Option<&MetricSummary>,
+    warning_threshold: f64,
+    danger_threshold: f64,
+) -> &'static str {
     let peak = [credits, requests]
         .into_iter()
         .flatten()
@@ -460,8 +633,8 @@ fn window_level(credits: Option<&MetricSummary>, requests: Option<&MetricSummary
         });
 
     match peak {
-        Some(peak) if peak >= 90.0 => "danger",
-        Some(peak) if peak >= 75.0 => "warning",
+        Some(peak) if peak >= danger_threshold => "danger",
+        Some(peak) if peak >= warning_threshold => "warning",
         Some(_) => "ok",
         None => "unknown",
     }
@@ -498,8 +671,7 @@ fn metric_to_json(metric: Option<&MetricSummary>) -> Value {
     }
 }
 
-fn read_abtop_status() -> Option<Value> {
-    let binary = env::var("ABTOP_BIN").unwrap_or_else(|_| "abtop".to_string());
+fn read_abtop_status(binary: &str) -> Option<Value> {
     let output = Command::new(binary).arg("--status-json").output().ok()?;
     if !output.status.success() {
         return None;
@@ -538,6 +710,40 @@ fn print_human(windows: &[WindowSummary], abtop: Option<&Value>) {
             }
         }
     }
+}
+
+fn print_compact(windows: &[WindowSummary], abtop: Option<&Value>) {
+    let mut parts = vec!["NG".to_string()];
+    for window in windows {
+        let peak = peak_percent(window)
+            .map(|value| format!("{value:.0}%"))
+            .unwrap_or_else(|| "n/a".to_string());
+        parts.push(format!("{}:{}:{}", window.key, window.level, peak));
+    }
+    if let Some(abtop) = abtop {
+        if let Some(agents) = abtop.get("agents").and_then(Value::as_array) {
+            for agent in agents {
+                let agent_cli = agent
+                    .get("agent_cli")
+                    .and_then(Value::as_str)
+                    .unwrap_or("agent");
+                if let Some(ctx) = agent.get("max_context_pct").and_then(to_number) {
+                    parts.push(format!("{agent_cli}:ctx{ctx:.0}%"));
+                }
+            }
+        }
+    }
+    println!("{}", parts.join(" "));
+}
+
+fn peak_percent(window: &WindowSummary) -> Option<f64> {
+    [window.credits.as_ref(), window.requests.as_ref()]
+        .into_iter()
+        .flatten()
+        .map(|metric| metric.percent)
+        .fold(None, |peak: Option<f64>, percent| {
+            Some(peak.map_or(percent, |peak| peak.max(percent)))
+        })
 }
 
 fn format_metric(metric: &MetricSummary) -> String {
@@ -617,7 +823,7 @@ mod tests {
 
     #[test]
     fn summarizes_credit_and_request_windows() {
-        let windows = summarize_me(&demo_payload());
+        let windows = summarize_me(&demo_payload(), 75.0, 90.0);
 
         assert_eq!(
             windows.iter().map(|window| window.key).collect::<Vec<_>>(),
@@ -638,7 +844,7 @@ mod tests {
             }
         });
 
-        let windows = summarize_me(&payload);
+        let windows = summarize_me(&payload, 75.0, 90.0);
 
         let credits = windows[0].credits.as_ref().unwrap();
         assert_eq!(credits.used, 30.0);
@@ -652,7 +858,7 @@ mod tests {
             "id": "usr_demo",
             "usage": {"rows": [{"credits5Hours": 39, "creditLimit5Hours": 50}]}
         });
-        let encoded = summary_to_json(&summarize_me(&payload), None).to_string();
+        let encoded = summary_to_json(&summarize_me(&payload, 75.0, 90.0), None).to_string();
 
         assert!(encoded.contains("\"source\":\"neurogate\""));
         assert!(!encoded.contains("usr_demo"));
@@ -692,5 +898,39 @@ mod tests {
         assert_eq!(exit_code(&windows, FailOn::Warning), 2);
         assert_eq!(exit_code(&windows, FailOn::Danger), 3);
         assert_eq!(exit_code(&windows, FailOn::Never), 0);
+    }
+
+    #[test]
+    fn custom_thresholds_change_window_level() {
+        let windows = summarize_me(&demo_payload(), 80.0, 95.0);
+
+        assert_eq!(windows[0].level, "ok");
+    }
+
+    #[test]
+    fn parses_dotenv_without_leaking_comments() {
+        let parsed = parse_dotenv(
+            r#"
+            # comment
+            export NEUROGATE_API_KEY="demo"
+            NEUROGATE_API_BASE=https://api.neurogate.space
+            ABTOP_BIN='abtop'
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(parsed.get("NEUROGATE_API_KEY").unwrap(), "demo");
+        assert_eq!(
+            parsed.get("NEUROGATE_API_BASE").unwrap(),
+            "https://api.neurogate.space"
+        );
+        assert_eq!(parsed.get("ABTOP_BIN").unwrap(), "abtop");
+    }
+
+    #[test]
+    fn compact_output_uses_peak_percent() {
+        let windows = summarize_me(&demo_payload(), 75.0, 90.0);
+
+        assert_eq!(peak_percent(&windows[0]).unwrap(), 78.0);
     }
 }

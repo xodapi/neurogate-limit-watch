@@ -55,9 +55,12 @@ target/release/nglimit --demo
 С реальным ключом:
 
 ```bash
-export NEUROGATE_API_KEY="ваш_ключ"
+cp .env.example .env
+# затем вписать ключ в .env:
+# NEUROGATE_API_KEY=ваш_ключ
 nglimit
 nglimit --json
+nglimit --compact
 ```
 
 Какие ОС поддерживаются:
@@ -68,6 +71,9 @@ Windows, macOS, Linux. Android/Termux планируется как отдель
 - Polling NeuroGate `/v1/me`.
 - Расчет credit/request usage для 5h / 24h / 7d / 30d.
 - Human output и JSON output.
+- Compact output для виджетов/status bar.
+- `.env` рядом с бинарником или в рабочей директории.
+- Настраиваемые пороги `--warning` / `--danger`.
 - Demo/mock-режим без ключа и сети.
 - Опциональная интеграция с `abtop --status-json`.
 - CI и release workflow для бинарников.

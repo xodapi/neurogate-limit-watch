@@ -49,6 +49,48 @@ Windows PowerShell:
 .\nglimit.exe --demo
 ```
 
+## .env рядом с бинарником
+
+Ключ NeuroGate можно держать в локальном `.env` рядом с `nglimit` или в
+директории, из которой вы запускаете команду. В релизный архив входит
+`.env.example`.
+
+```bash
+cp .env.example .env
+```
+
+Отредактируйте `.env`:
+
+```dotenv
+NEUROGATE_API_KEY=YOUR_NEUROGATE_API_KEY
+NEUROGATE_API_BASE=https://api.neurogate.space
+```
+
+После этого:
+
+```bash
+nglimit
+nglimit --compact
+nglimit --json
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+.\nglimit.exe --compact
+```
+
+Порядок поиска:
+
+1. `--env-file <PATH>`
+2. `.env` в текущей директории
+3. `.env` рядом с исполняемым файлом `nglimit`
+
+Настоящие переменные окружения имеют приоритет над значениями из `.env`.
+Файл `.env` добавлен в `.gitignore`, его не нужно коммитить.
+
 ## Сборка из исходников
 
 Требуется Rust stable.
@@ -108,6 +150,14 @@ nglimit --watch 60 --with-abtop
 ```bash
 nglimit --fail-on warning
 nglimit --fail-on danger --json
+nglimit --warning 80 --danger 95 --fail-on warning
+```
+
+Компактный вывод одной строкой для виджетов/status bar:
+
+```bash
+nglimit --compact
+nglimit --compact --with-abtop
 ```
 
 ## Вывод
@@ -193,6 +243,9 @@ cargo run --locked -- --demo --json
 - Polling NeuroGate `/v1/me`.
 - Окна credit/request для 5h / 24h / 7d / 30d.
 - Human output и JSON output.
+- Compact output для виджетов/status bar.
+- `.env` рядом с бинарником или рабочей директорией.
+- Настраиваемые пороги warning/danger.
 - Demo/mock-режим без ключа и сети.
 - Опциональная интеграция с локальным `abtop`.
 - CI и release workflow для нативных бинарников.

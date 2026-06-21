@@ -51,6 +51,48 @@ Windows PowerShell:
 .\nglimit.exe --demo
 ```
 
+## .env Next To The Binary
+
+You can keep the NeuroGate API key in a local `.env` file next to `nglimit`
+or in the directory where you run it. The release archive includes
+`.env.example`.
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```dotenv
+NEUROGATE_API_KEY=YOUR_NEUROGATE_API_KEY
+NEUROGATE_API_BASE=https://api.neurogate.space
+```
+
+Then run:
+
+```bash
+nglimit
+nglimit --compact
+nglimit --json
+```
+
+Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+.\nglimit.exe --compact
+```
+
+Lookup order:
+
+1. `--env-file <PATH>`
+2. `.env` in the current directory
+3. `.env` next to the `nglimit` executable
+
+Real environment variables have priority over `.env` values. `.env` is ignored
+by git and should not be committed.
+
 ## Build From Source
 
 Requirements: Rust stable.
@@ -110,6 +152,14 @@ CI/automation threshold:
 ```bash
 nglimit --fail-on warning
 nglimit --fail-on danger --json
+nglimit --warning 80 --danger 95 --fail-on warning
+```
+
+Compact one-line output for widgets/status bars:
+
+```bash
+nglimit --compact
+nglimit --compact --with-abtop
 ```
 
 ## Output
@@ -196,6 +246,9 @@ What works:
 - NeuroGate `/v1/me` polling.
 - 5h / 24h / 7d / 30d credit and request windows.
 - Human output and JSON output.
+- Compact output for widgets/status bars.
+- `.env` file next to the binary or working directory.
+- Custom warning/danger thresholds.
 - Demo/mock mode without a key.
 - Optional local abtop integration.
 - CI and release workflow for native binaries.

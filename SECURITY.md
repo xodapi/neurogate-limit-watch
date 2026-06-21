@@ -6,8 +6,10 @@
 
 - Do not commit API keys.
 - Pass the NeuroGate key through `NEUROGATE_API_KEY`.
+- Or keep it in a local `.env` file next to the binary or working directory.
 - The tool never writes the key to disk.
 - The tool does not print the key in normal errors.
+- `.env` is gitignored; only `.env.example` should be committed.
 - Demo and mock modes do not require a key.
 
 ## Network

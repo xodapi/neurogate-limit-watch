@@ -41,7 +41,7 @@ jobs:
           name="nglimit-${GITHUB_REF_NAME}-${{ matrix.asset }}"
           mkdir -p "dist/${name}"
           cp "target/release/${{ matrix.binary }}" "dist/${name}/"
-          cp README.md README.ru.md LICENSE "dist/${name}/"
+          cp README.md README.ru.md LICENSE .env.example "dist/${name}/"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
           shasum -a 256 "dist/${name}.tar.gz" > "dist/${name}.tar.gz.sha256"
       - name: Package Windows binary
@@ -51,7 +51,7 @@ jobs:
           $name = "nglimit-${env:GITHUB_REF_NAME}-${{ matrix.asset }}"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
-          Copy-Item README.md,README.ru.md,LICENSE "dist/$name/"
+          Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
           $hash = Get-FileHash "dist/$name.zip" -Algorithm SHA256
           "$($hash.Hash.ToLower())  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
