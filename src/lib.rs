@@ -212,6 +212,15 @@ pub fn summarize_me(
     warning_threshold: f64,
     danger_threshold: f64,
 ) -> Vec<WindowState> {
+    summarize_me_with_thresholds(payload, warning_threshold, danger_threshold, &std::collections::HashMap::new())
+}
+
+pub fn summarize_me_with_thresholds(
+    payload: &Value,
+    warning_threshold: f64,
+    danger_threshold: f64,
+    window_thresholds: &std::collections::HashMap<String, (f64, f64)>,
+) -> Vec<WindowState> {
     let rows = extract_usage_rows(payload);
     let now = Utc::now();
     let mut summaries = Vec::new();
@@ -235,11 +244,16 @@ pub fn summarize_me(
             continue;
         }
 
+        let (w, d) = window_thresholds
+            .get(key)
+            .copied()
+            .unwrap_or((warning_threshold, danger_threshold));
+
         let level = window_level(
             credits.as_ref(),
             requests.as_ref(),
-            warning_threshold,
-            danger_threshold,
+            w,
+            d,
         );
 
         summaries.push(WindowState {

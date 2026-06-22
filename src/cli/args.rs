@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use neurogate_limit_watch::VERSION;
@@ -31,6 +32,7 @@ pub struct Args {
     pub fail_on: FailOn,
     pub warning_threshold: f64,
     pub danger_threshold: f64,
+    pub window_thresholds: HashMap<String, (f64, f64)>,
     pub help: bool,
     pub version: bool,
 }
@@ -53,6 +55,7 @@ where
         fail_on: FailOn::Never,
         warning_threshold: 75.0,
         danger_threshold: 90.0,
+        window_thresholds: HashMap::new(),
         help: false,
         version: false,
     };
@@ -81,6 +84,10 @@ where
             "--danger" => {
                 parsed.danger_threshold =
                     parse_percent(&next_value(&mut iter, "--danger")?, "--danger")?;
+            }
+            "--threshold" => {
+                let value = next_value(&mut iter, "--threshold")?;
+                parsed.window_thresholds = parse_window_thresholds(&value)?;
             }
             "--watch" => {
                 let value = next_value(&mut iter, "--watch")?;
@@ -142,6 +149,39 @@ where
         .ok_or_else(|| format!("{option} requires a value"))
 }
 
+fn parse_window_thresholds(value: &str) -> Result<HashMap<String, (f64, f64)>, String> {
+    let mut result = HashMap::new();
+    for entry in value.split(',') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        let (key, thresholds) = entry
+            .split_once('=')
+            .ok_or_else(|| format!("--threshold format: KEY=WARNING[:DANGER], got '{entry}'"))?;
+        let key = key.trim().to_string();
+        if !["5h", "24h", "7d", "30d"].contains(&key.as_str()) {
+            return Err(format!(
+                "--threshold key must be one of: 5h, 24h, 7d, 30d; got '{key}'"
+            ));
+        }
+        let parts: Vec<&str> = thresholds.split(':').collect();
+        let warning = parse_percent(parts[0], "--threshold")?;
+        let danger = if parts.len() > 1 {
+            parse_percent(parts[1], "--threshold")?
+        } else {
+            90.0
+        };
+        if warning >= danger {
+            return Err(format!(
+                "--threshold: warning ({warning}) must be lower than danger ({danger}) for {key}"
+            ));
+        }
+        result.insert(key, (warning, danger));
+    }
+    Ok(result)
+}
+
 pub fn print_help() {
     println!(
         "\
@@ -164,6 +204,8 @@ OPTIONS:
       --fail-on <LEVEL>      Exit non-zero on threshold: never, warning, danger
       --warning <PCT>        Warning threshold percentage [default: 75]
       --danger <PCT>         Danger threshold percentage [default: 90]
+      --threshold <SPEC>     Per-window thresholds, e.g. 5h=80:95,7d=90
+                             Format: KEY=WARNING[:DANGER] where KEY is 5h,24h,7d,30d
       --env-file <PATH>      Load .env file explicitly
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
@@ -245,5 +287,36 @@ mod tests {
     fn watch_rejects_non_integer() {
         let error = parse_args(["--watch".to_string(), "abc".to_string()]).unwrap_err();
         assert!(error.contains("--watch must be a non-negative"));
+    }
+
+    #[test]
+    fn window_thresholds_parsed_correctly() {
+        let args = parse_args([
+            "--threshold".to_string(),
+            "5h=80:95,7d=85:95".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(args.window_thresholds.get("5h"), Some(&(80.0, 95.0)));
+        assert_eq!(args.window_thresholds.get("7d"), Some(&(85.0, 95.0)));
+    }
+
+    #[test]
+    fn window_threshold_rejects_invalid_key() {
+        let error = parse_args([
+            "--threshold".to_string(),
+            "1h=80".to_string(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("must be one of: 5h, 24h, 7d, 30d"));
+    }
+
+    #[test]
+    fn window_threshold_rejects_bad_format() {
+        let error = parse_args([
+            "--threshold".to_string(),
+            "5h80".to_string(),
+        ])
+        .unwrap_err();
+        assert!(error.contains("format"));
     }
 }

@@ -38,7 +38,7 @@ pub fn collect_status(
     };
 
     let windows =
-        ng::summarize_me(&payload, args.warning_threshold, args.danger_threshold);
+        ng::summarize_me_with_thresholds(&payload, args.warning_threshold, args.danger_threshold, &args.window_thresholds);
     let abtop = if args.with_abtop {
         ng::read_abtop_status(&config.abtop_bin)
     } else {
