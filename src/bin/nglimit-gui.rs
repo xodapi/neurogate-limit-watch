@@ -1,13 +1,10 @@
-use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, TimeZone, Utc};
-use serde_json::{json, Map, Value};
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 use std::collections::HashMap;
-use std::env;
-use std::fs;
-use std::path::PathBuf;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+
+use neurogate_limit_watch as ng;
 
 slint::slint! {
     import { Button } from "std-widgets.slint";
@@ -554,72 +551,6 @@ slint::slint! {
     }
 }
 
-const DEFAULT_API_BASE: &str = "https://api.neurogate.space";
-const USER_AGENT: &str = concat!("neurogate-limit-watch-gui/", env!("CARGO_PKG_VERSION"));
-
-const WINDOWS: [(&str, &str, &str, &str); 4] = [
-    (
-        "5h",
-        "5Hours",
-        "window5HoursStartedAt",
-        "window5HoursEndsAt",
-    ),
-    (
-        "24h",
-        "24Hours",
-        "window24HoursStartedAt",
-        "window24HoursEndsAt",
-    ),
-    ("7d", "7Days", "window7DaysStartedAt", "window7DaysEndsAt"),
-    (
-        "30d",
-        "30Days",
-        "window30DaysStartedAt",
-        "window30DaysEndsAt",
-    ),
-];
-
-#[derive(Clone, Debug)]
-struct Metric {
-    used: f64,
-    limit: f64,
-    remaining: f64,
-    percent: f64,
-}
-
-#[derive(Clone, Debug)]
-struct WindowState {
-    key: &'static str,
-    level: &'static str,
-    reset: String,
-    credits: Option<Metric>,
-    requests: Option<Metric>,
-    percent: f64,
-    rate: String,
-}
-
-#[derive(Clone, Debug)]
-struct Dashboard {
-    source: String,
-    status: String,
-    agent: String,
-    token_rate: String,
-    windows: Vec<WindowState>,
-}
-
-#[derive(Clone, Debug)]
-struct AgentStatus {
-    summary: String,
-    token_rate: String,
-}
-
-#[derive(Debug)]
-struct RuntimeConfig {
-    api_base: String,
-    api_key: String,
-    abtop_bin: String,
-}
-
 fn main() {
     let app = AppWindow::new().expect("cannot initialize Slint window");
 
@@ -652,7 +583,7 @@ fn start_refresh(app: Weak<AppWindow>, demo: bool) {
     });
 }
 
-fn apply_dashboard(app: &AppWindow, result: Result<Dashboard, String>) {
+fn apply_dashboard(app: &AppWindow, result: Result<ng::Dashboard, String>) {
     match result {
         Ok(dashboard) => {
             app.set_status_text(dashboard.status.into());
@@ -687,101 +618,72 @@ fn apply_dashboard(app: &AppWindow, result: Result<Dashboard, String>) {
     }
 }
 
-fn apply_window(app: &AppWindow, key: &str, window: Option<&WindowState>) {
-    let fallback = WindowState {
+fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
+    let fallback = ng::WindowState {
         key: "n/a",
-        level: "н/д",
+        level: "н/д".to_string(),
         reset: "сброс неизвестен".to_string(),
+        reset_in_seconds: None,
         credits: None,
         requests: None,
         percent: 0.0,
-        rate: "темп окна: н/д".to_string(),
     };
     let window = window.unwrap_or(&fallback);
-    let level: SharedString = window.level.into();
+    let level: SharedString = window.level.clone().into();
     let reset: SharedString = window.reset.clone().into();
-    let credits: SharedString = metric_text("кредиты", window.credits.as_ref()).into();
-    let requests: SharedString = metric_text("запросы", window.requests.as_ref()).into();
-    let rate: SharedString = window.rate.clone().into();
-    let percent_text: SharedString = format!("{} пик", format_percent(window.percent)).into();
+    let credits: SharedString = ng::metric_text("кредиты", window.credits.as_ref()).into();
+    let requests: SharedString = ng::metric_text("запросы", window.requests.as_ref()).into();
+    let percent_text: SharedString = format!("{} пик", ng::format_percent(window.percent)).into();
     let percent = window.percent as f32;
-    let credit_percent = metric_percent(window.credits.as_ref()) as f32;
-    let request_percent = metric_percent(window.requests.as_ref()) as f32;
+    let credit_percent = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
+        .unwrap_or(0.0) as f32;
+    let request_percent = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
+        .unwrap_or(0.0) as f32;
 
-    match key {
-        "5h" => {
-            app.set_five_level(level);
-            app.set_five_reset(reset);
-            app.set_five_credits(credits);
-            app.set_five_requests(requests);
-            app.set_five_rate(rate);
-            app.set_five_percent_text(percent_text);
-            app.set_five_percent(percent);
-            app.set_five_credit_percent(credit_percent);
-            app.set_five_request_percent(request_percent);
-        }
-        "24h" => {
-            app.set_day_level(level);
-            app.set_day_reset(reset);
-            app.set_day_credits(credits);
-            app.set_day_requests(requests);
-            app.set_day_rate(rate);
-            app.set_day_percent_text(percent_text);
-            app.set_day_percent(percent);
-            app.set_day_credit_percent(credit_percent);
-            app.set_day_request_percent(request_percent);
-        }
-        "7d" => {
-            app.set_week_level(level);
-            app.set_week_reset(reset);
-            app.set_week_credits(credits);
-            app.set_week_requests(requests);
-            app.set_week_rate(rate);
-            app.set_week_percent_text(percent_text);
-            app.set_week_percent(percent);
-            app.set_week_credit_percent(credit_percent);
-            app.set_week_request_percent(request_percent);
-        }
-        "30d" => {
-            app.set_month_level(level);
-            app.set_month_reset(reset);
-            app.set_month_credits(credits);
-            app.set_month_requests(requests);
-            app.set_month_rate(rate);
-            app.set_month_percent_text(percent_text);
-            app.set_month_percent(percent);
-            app.set_month_credit_percent(credit_percent);
-            app.set_month_request_percent(request_percent);
-        }
-        _ => {}
-    }
+    let (set_level, set_reset, set_credits, set_requests, set_rate, set_ptext, set_pct, set_cp, set_rp) = match key {
+        "5h" => (app.set_five_level, app.set_five_reset, app.set_five_credits, app.set_five_requests, app.set_five_rate, app.set_five_percent_text, app.set_five_percent, app.set_five_credit_percent, app.set_five_request_percent),
+        "24h" => (app.set_day_level, app.set_day_reset, app.set_day_credits, app.set_day_requests, app.set_day_rate, app.set_day_percent_text, app.set_day_percent, app.set_day_credit_percent, app.set_day_request_percent),
+        "7d" => (app.set_week_level, app.set_week_reset, app.set_week_credits, app.set_week_requests, app.set_week_rate, app.set_week_percent_text, app.set_week_percent, app.set_week_credit_percent, app.set_week_request_percent),
+        "30d" => (app.set_month_level, app.set_month_reset, app.set_month_credits, app.set_month_requests, app.set_month_rate, app.set_month_percent_text, app.set_month_percent, app.set_month_credit_percent, app.set_month_request_percent),
+        _ => return,
+    };
+
+    set_level(level);
+    set_reset(reset);
+    set_credits(credits);
+    set_requests(requests);
+    set_rate("".into());
+    set_ptext(percent_text);
+    set_pct(percent);
+    set_cp(credit_percent);
+    set_rp(request_percent);
 }
 
-fn load_dashboard(force_demo: bool) -> Result<Dashboard, String> {
-    let dotenv = load_dotenv()?;
+fn load_dashboard(force_demo: bool) -> Result<ng::Dashboard, String> {
+    let dotenv = ng::load_dotenv_custom(None)?;
     let config = runtime_config(&dotenv);
     let (payload, source) = if force_demo {
         (
-            demo_payload(),
+            ng::demo_payload(),
             "источник: встроенные демо-данные".to_string(),
         )
     } else if config.api_key.is_empty() {
         (
-            demo_payload(),
+            ng::demo_payload(),
             "источник: демо; добавьте NEUROGATE_API_KEY в .env для live-лимитов".to_string(),
         )
     } else {
         (
-            fetch_me(&config.api_key, &config.api_base)?,
+            ng::fetch_me(&config.api_key, &config.api_base, ng::USER_AGENT_GUI)?,
             format!("источник: live NeuroGate /v1/me на {}", config.api_base),
         )
     };
 
-    let windows = summarize_me(&payload);
-    let status = dashboard_status(&windows);
-    let agent = read_agent_status(&config.abtop_bin);
+    let windows = ng::summarize_me(&payload, 75.0, 90.0);
+    let status = ng::dashboard_status(&windows);
+    let agent = ng::read_agent_status(&config.abtop_bin);
 
-    Ok(Dashboard {
+    Ok(ng::Dashboard {
         source,
         status,
         agent: agent.summary,
@@ -790,498 +692,12 @@ fn load_dashboard(force_demo: bool) -> Result<Dashboard, String> {
     })
 }
 
-fn runtime_config(dotenv: &HashMap<String, String>) -> RuntimeConfig {
-    RuntimeConfig {
-        api_base: config_value("NEUROGATE_API_BASE", dotenv)
-            .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
-        api_key: config_value("NEUROGATE_API_KEY", dotenv).unwrap_or_default(),
-        abtop_bin: config_value("ABTOP_BIN", dotenv).unwrap_or_else(|| "abtop".to_string()),
-    }
-}
-
-fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<String> {
-    env::var(key)
-        .ok()
-        .filter(|value| !value.is_empty())
-        .or_else(|| dotenv.get(key).cloned().filter(|value| !value.is_empty()))
-}
-
-fn load_dotenv() -> Result<HashMap<String, String>, String> {
-    let Some(path) = find_dotenv() else {
-        return Ok(HashMap::new());
-    };
-    let raw = fs::read_to_string(&path)
-        .map_err(|error| format!("cannot read env file {}: {error}", path.display()))?;
-    parse_dotenv(&raw).map_err(|error| format!("{}: {error}", path.display()))
-}
-
-fn find_dotenv() -> Option<PathBuf> {
-    let cwd_env = PathBuf::from(".env");
-    if cwd_env.is_file() {
-        return Some(cwd_env);
-    }
-
-    let exe = env::current_exe().ok()?;
-    let dir = exe.parent()?;
-    let exe_env = dir.join(".env");
-    exe_env.is_file().then_some(exe_env)
-}
-
-fn parse_dotenv(raw: &str) -> Result<HashMap<String, String>, String> {
-    let mut values = HashMap::new();
-    for (index, line) in raw.lines().enumerate() {
-        let mut line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("export ") {
-            line = rest.trim_start();
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            return Err(format!("line {} is not KEY=VALUE", index + 1));
-        };
-        values.insert(
-            key.trim().to_string(),
-            unquote_env_value(value.trim()).to_string(),
-        );
-    }
-    Ok(values)
-}
-
-fn unquote_env_value(value: &str) -> &str {
-    if value.len() >= 2 {
-        let bytes = value.as_bytes();
-        if (bytes[0] == b'"' && bytes[value.len() - 1] == b'"')
-            || (bytes[0] == b'\'' && bytes[value.len() - 1] == b'\'')
-        {
-            return &value[1..value.len() - 1];
-        }
-    }
-    value
-}
-
-fn fetch_me(api_key: &str, api_base: &str) -> Result<Value, String> {
-    let url = format!("{}/v1/me", api_base.trim_end_matches('/'));
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(USER_AGENT)
-        .build()
-        .map_err(|error| format!("cannot initialize HTTP client: {error}"))?;
-
-    let response = client
-        .get(url)
-        .bearer_auth(api_key)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .map_err(|error| format!("cannot reach NeuroGate API: {error}"))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!(
-            "NeuroGate /v1/me returned HTTP {}",
-            status.as_u16()
-        ));
-    }
-
-    let value: Value = response
-        .json()
-        .map_err(|error| format!("NeuroGate /v1/me returned invalid JSON: {error}"))?;
-    if !value.is_object() {
-        return Err("NeuroGate /v1/me returned a non-object JSON payload".to_string());
-    }
-    Ok(value)
-}
-
-fn demo_payload() -> Value {
-    let now = Utc::now();
-    let five_start = now - ChronoDuration::minutes(28);
-    let day_start = now - ChronoDuration::hours(5);
-    let week_start = now - ChronoDuration::days(1);
-    let month_start = now - ChronoDuration::days(9);
-    json!({
-        "usage": {
-            "rows": [
-                {
-                    "creditLimit5Hours": 50,
-                    "creditLimit24Hours": 180,
-                    "creditLimit7Days": 600,
-                    "creditLimit30Days": 2000,
-                    "requestLimit5Hours": 1000,
-                    "requestLimit24Hours": 4000,
-                    "requestLimit7Days": 20000,
-                    "requestLimit30Days": 80000,
-                    "credits5Hours": 39,
-                    "credits24Hours": 91,
-                    "credits7Days": 214,
-                    "credits30Days": 819,
-                    "requests5Hours": 610,
-                    "requests24Hours": 1510,
-                    "requests7Days": 8300,
-                    "requests30Days": 26000,
-                    "window5HoursStartedAt": five_start.to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window5HoursEndsAt": (now + ChronoDuration::hours(4)).to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window24HoursStartedAt": day_start.to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window24HoursEndsAt": (now + ChronoDuration::hours(19)).to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window7DaysStartedAt": week_start.to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window7DaysEndsAt": (now + ChronoDuration::days(6)).to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window30DaysStartedAt": month_start.to_rfc3339_opts(SecondsFormat::Secs, true),
-                    "window30DaysEndsAt": (now + ChronoDuration::days(21)).to_rfc3339_opts(SecondsFormat::Secs, true)
-                }
-            ]
-        }
-    })
-}
-
-fn summarize_me(payload: &Value) -> Vec<WindowState> {
-    let rows = extract_usage_rows(payload);
-    let now = Utc::now();
-    let mut summaries = Vec::new();
-
-    for (key, suffix, start_field, reset_field) in WINDOWS {
-        let credits = summarize_metric(
-            &rows,
-            &format!("credits{suffix}"),
-            &format!("creditLimit{suffix}"),
-        );
-        let requests = summarize_metric(
-            &rows,
-            &format!("requests{suffix}"),
-            &format!("requestLimit{suffix}"),
-        );
-        let reset = parse_reset(first_value(&rows, reset_field), now);
-        let rate = rate_text(
-            credits.as_ref(),
-            requests.as_ref(),
-            first_value(&rows, start_field),
-            now,
-        );
-        let percent = peak_percent(credits.as_ref(), requests.as_ref()).unwrap_or(0.0);
-        summaries.push(WindowState {
-            key,
-            level: window_level(percent),
-            reset,
-            credits,
-            requests,
-            percent,
-            rate,
-        });
-    }
-    summaries
-}
-
-fn extract_usage_rows(payload: &Value) -> Vec<&Map<String, Value>> {
-    if let Some(rows) = payload
-        .get("usage")
-        .and_then(Value::as_object)
-        .and_then(|usage| usage.get("rows"))
-        .and_then(Value::as_array)
-    {
-        return object_rows(rows);
-    }
-
-    if let Some(rows) = payload
-        .get("data")
-        .and_then(Value::as_object)
-        .and_then(|data| data.get("usage"))
-        .and_then(Value::as_object)
-        .and_then(|usage| usage.get("rows"))
-        .and_then(Value::as_array)
-    {
-        return object_rows(rows);
-    }
-
-    if let Some(rows) = payload
-        .as_object()
-        .and_then(|object| object.get("rows"))
-        .and_then(Value::as_array)
-    {
-        return object_rows(rows);
-    }
-
-    Vec::new()
-}
-
-fn object_rows(rows: &[Value]) -> Vec<&Map<String, Value>> {
-    rows.iter().filter_map(Value::as_object).collect()
-}
-
-fn summarize_metric(
-    rows: &[&Map<String, Value>],
-    used_field: &str,
-    limit_field: &str,
-) -> Option<Metric> {
-    let mut used_total = 0.0;
-    let mut limits = Vec::<f64>::new();
-    let mut seen = false;
-
-    for row in rows {
-        let used = row.get(used_field).and_then(to_number);
-        let limit = row.get(limit_field).and_then(to_number);
-        if used.is_none() && limit.is_none() {
-            continue;
-        }
-        seen = true;
-        used_total += used.unwrap_or(0.0);
-        if let Some(limit) = limit {
-            if limit > 0.0
-                && !limits
-                    .iter()
-                    .any(|existing| (*existing - limit).abs() < f64::EPSILON)
-            {
-                limits.push(limit);
-            }
-        }
-    }
-
-    let limit_total: f64 = limits.iter().sum();
-    if !seen || limit_total <= 0.0 {
-        return None;
-    }
-
-    let remaining = (limit_total - used_total).max(0.0);
-    let percent = ((used_total / limit_total) * 100.0).clamp(0.0, 999.0);
-    Some(Metric {
-        used: used_total,
-        limit: limit_total,
-        remaining,
-        percent,
-    })
-}
-
-fn first_value<'a>(rows: &[&'a Map<String, Value>], field: &str) -> Option<&'a Value> {
-    rows.iter().find_map(|row| match row.get(field) {
-        Some(Value::Null) | None => None,
-        Some(Value::String(text)) if text.is_empty() => None,
-        value => value,
-    })
-}
-
-fn to_number(value: &Value) -> Option<f64> {
-    match value {
-        Value::Number(number) => number.as_f64(),
-        Value::String(text) => text.parse::<f64>().ok(),
-        _ => None,
-    }
-}
-
-fn parse_datetime_value(value: &Value) -> Option<DateTime<Utc>> {
-    match value {
-        Value::Number(number) => number
-            .as_i64()
-            .and_then(|timestamp| Utc.timestamp_opt(timestamp, 0).single()),
-        Value::String(text) => {
-            let raw = text.trim();
-            if raw.is_empty() {
-                None
-            } else if let Ok(timestamp) = raw.parse::<i64>() {
-                Utc.timestamp_opt(timestamp, 0).single()
-            } else {
-                DateTime::parse_from_rfc3339(raw)
-                    .map(|datetime| datetime.with_timezone(&Utc))
-                    .ok()
-            }
-        }
-        _ => None,
-    }
-}
-
-fn parse_reset(value: Option<&Value>, now: DateTime<Utc>) -> String {
-    let Some(value) = value else {
-        return "сброс неизвестен".to_string();
-    };
-
-    if let Some(datetime) = parse_datetime_value(value) {
-        let seconds = (datetime - now).num_seconds().max(0);
-        format!("сброс {}", format_duration(seconds))
-    } else {
-        format!(
-            "сброс в {}",
-            value
-                .as_str()
-                .map(str::to_string)
-                .unwrap_or_else(|| value.to_string())
-        )
-    }
-}
-
-fn window_level(percent: f64) -> &'static str {
-    if percent >= 90.0 {
-        "лимит"
-    } else if percent >= 75.0 {
-        "внимание"
-    } else {
-        "норма"
-    }
-}
-
-fn peak_percent(credits: Option<&Metric>, requests: Option<&Metric>) -> Option<f64> {
-    [credits, requests]
-        .into_iter()
-        .flatten()
-        .map(|metric| metric.percent)
-        .fold(None, |peak: Option<f64>, percent| {
-            Some(peak.map_or(percent, |peak| peak.max(percent)))
-        })
-}
-
-fn metric_percent(metric: Option<&Metric>) -> f64 {
-    metric.map(|metric| metric.percent).unwrap_or(0.0)
-}
-
-fn dashboard_status(windows: &[WindowState]) -> String {
-    let peak = windows
-        .iter()
-        .map(|window| window.percent)
-        .fold(0.0, f64::max);
-    let level = window_level(peak);
-    format!(
-        "квота: {level} | пик {} | обновлено {}",
-        format_percent(peak),
-        Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
-    )
-}
-
-fn metric_text(label: &str, metric: Option<&Metric>) -> String {
-    match metric {
-        Some(metric) => format!(
-            "{label}: {}/{} ({}%, осталось {})",
-            short_number(metric.used),
-            short_number(metric.limit),
-            one_decimal(metric.percent),
-            short_number(metric.remaining)
-        ),
-        None => format!("{label}: н/д"),
-    }
-}
-
-fn format_duration(seconds: i64) -> String {
-    match seconds {
-        seconds if seconds < 60 => format!("через {seconds}с"),
-        seconds if seconds < 3600 => format!("через {}м", seconds / 60),
-        seconds if seconds < 86_400 => {
-            format!("через {}ч {}м", seconds / 3600, (seconds % 3600) / 60)
-        }
-        seconds => format!("через {}д {}ч", seconds / 86_400, (seconds % 86_400) / 3600),
-    }
-}
-
-fn rate_text(
-    credits: Option<&Metric>,
-    requests: Option<&Metric>,
-    start: Option<&Value>,
-    now: DateTime<Utc>,
-) -> String {
-    let Some(start) = start.and_then(parse_datetime_value) else {
-        return "темп окна: нет window*StartedAt".to_string();
-    };
-    let elapsed_minutes = ((now - start).num_seconds().max(60) as f64) / 60.0;
-    let credit_rate = credits
-        .map(|metric| format!("{}/мин", short_rate(metric.used / elapsed_minutes)))
-        .unwrap_or_else(|| "н/д".to_string());
-    let request_rate = requests
-        .map(|metric| format!("{}/мин", short_rate(metric.used / elapsed_minutes)))
-        .unwrap_or_else(|| "н/д".to_string());
-
-    format!("темп окна: кред {credit_rate} | запр {request_rate}")
-}
-
-fn format_percent(value: f64) -> String {
-    format!("{}%", one_decimal(value))
-}
-
-fn one_decimal(value: f64) -> String {
-    format!("{value:.1}").replace('.', ",")
-}
-
-fn short_rate(value: f64) -> String {
-    if value >= 1000.0 {
-        short_number(value)
-    } else {
-        one_decimal(value)
-    }
-}
-
-fn read_agent_status(binary: &str) -> AgentStatus {
-    let Ok(output) = Command::new(binary).arg("--status-json").output() else {
-        return AgentStatus {
-            summary: "агенты: abtop не найден; задайте ABTOP_BIN".to_string(),
-            token_rate: "токены/мин: нет данных abtop".to_string(),
-        };
-    };
-    if !output.status.success() {
-        return AgentStatus {
-            summary: "агенты: статус abtop недоступен".to_string(),
-            token_rate: "токены/мин: нет данных abtop".to_string(),
-        };
-    }
-    let Ok(parsed) = serde_json::from_slice::<Value>(&output.stdout) else {
-        return AgentStatus {
-            summary: "агенты: abtop вернул невалидный JSON".to_string(),
-            token_rate: "токены/мин: нет данных abtop".to_string(),
-        };
-    };
-    let sessions = parsed
-        .get("sessions_total")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let active = parsed
-        .get("sessions_active")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let ctx = parsed
-        .get("agents")
-        .and_then(Value::as_array)
-        .and_then(|agents| {
-            agents
-                .iter()
-                .filter_map(|agent| agent.get("max_context_pct").and_then(to_number))
-                .fold(None, |peak: Option<f64>, value| {
-                    Some(peak.map_or(value, |peak| peak.max(value)))
-                })
-        })
-        .map(|value| format!("{value:.0}%"))
-        .unwrap_or_else(|| "н/д".to_string());
-    let token_rate = parsed
-        .get("token_rate")
-        .and_then(to_number)
-        .or_else(|| summed_agent_token_rate(&parsed));
-
-    AgentStatus {
-        summary: format!("агенты: сессий {sessions}, активных {active}, контекст макс. {ctx}"),
-        token_rate: token_rate
-            .map(|value| format!("токены/мин: {}", short_rate(value)))
-            .unwrap_or_else(|| "токены/мин: нет данных abtop".to_string()),
-    }
-}
-
-fn summed_agent_token_rate(parsed: &Value) -> Option<f64> {
-    parsed
-        .get("agents")
-        .and_then(Value::as_array)
-        .and_then(|agents| {
-            let mut total = 0.0;
-            let mut seen = false;
-            for agent in agents {
-                if let Some(rate) = agent.get("token_rate").and_then(to_number) {
-                    total += rate;
-                    seen = true;
-                }
-            }
-            seen.then_some(total)
-        })
-}
-
-fn short_number(value: f64) -> String {
-    let abs = value.abs();
-    if abs >= 1_000_000_000.0 {
-        format!("{}B", one_decimal(value / 1_000_000_000.0))
-    } else if abs >= 1_000_000.0 {
-        format!("{}M", one_decimal(value / 1_000_000.0))
-    } else if abs >= 1_000.0 {
-        format!("{}K", one_decimal(value / 1_000.0))
-    } else if value.fract().abs() < f64::EPSILON {
-        format!("{}", value as i64)
-    } else {
-        one_decimal(value)
+fn runtime_config(dotenv: &HashMap<String, String>) -> ng::RuntimeConfig {
+    ng::RuntimeConfig {
+        api_base: ng::config_value("NEUROGATE_API_BASE", dotenv)
+            .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
+        api_key: ng::config_value("NEUROGATE_API_KEY", dotenv).unwrap_or_default(),
+        abtop_bin: ng::config_value("ABTOP_BIN", dotenv)
+            .unwrap_or_else(|| "abtop".to_string()),
     }
 }

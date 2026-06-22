@@ -1,28 +1,16 @@
-use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
-use serde_json::{json, Map, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::env;
-use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-const DEFAULT_API_BASE: &str = "https://api.neurogate.space";
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-const USER_AGENT: &str = concat!("neurogate-limit-watch/", env!("CARGO_PKG_VERSION"));
-
-const WINDOWS: [(&str, &str, &str); 4] = [
-    ("5h", "5Hours", "window5HoursEndsAt"),
-    ("24h", "24Hours", "window24HoursEndsAt"),
-    ("7d", "7Days", "window7DaysEndsAt"),
-    ("30d", "30Days", "window30DaysEndsAt"),
-];
+use neurogate_limit_watch::{self as ng, VERSION};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FailOn {
@@ -57,26 +45,8 @@ struct Args {
     version: bool,
 }
 
-#[derive(Debug, Clone)]
-struct MetricSummary {
-    used: f64,
-    limit: f64,
-    remaining: f64,
-    percent: f64,
-}
-
-#[derive(Debug, Clone)]
-struct WindowSummary {
-    key: &'static str,
-    credits: Option<MetricSummary>,
-    requests: Option<MetricSummary>,
-    reset_at: Option<String>,
-    reset_in_seconds: Option<i64>,
-    level: &'static str,
-}
-
 #[derive(Debug)]
-struct RuntimeConfig {
+struct RuntimeConfigCli {
     api_base: String,
     api_key: String,
     abtop_bin: String,
@@ -84,9 +54,9 @@ struct RuntimeConfig {
 
 #[derive(Debug)]
 struct StatusSnapshot {
-    windows: Vec<WindowSummary>,
+    windows: Vec<ng::WindowState>,
     abtop: Option<Value>,
-    fetched_at: DateTime<Utc>,
+    fetched_at: chrono::DateTime<chrono::Utc>,
 }
 
 fn main() {
@@ -298,9 +268,9 @@ OPTIONS:
     );
 }
 
-fn run_once(args: &Args, config: &RuntimeConfig, notifier: &mut Notifier) -> Result<i32, String> {
+fn run_once(args: &Args, config: &RuntimeConfigCli, notifier: &mut Notifier) -> Result<i32, String> {
     let snapshot = collect_status(args, config)?;
-    let status = summary_to_json(&snapshot.windows, snapshot.abtop.as_ref());
+    let status = ng::summary_to_json(&snapshot.windows, snapshot.abtop.as_ref());
 
     match args.output {
         OutputMode::Json => {
@@ -319,18 +289,19 @@ fn run_once(args: &Args, config: &RuntimeConfig, notifier: &mut Notifier) -> Res
     Ok(exit_code(&snapshot.windows, args.fail_on))
 }
 
-fn collect_status(args: &Args, config: &RuntimeConfig) -> Result<StatusSnapshot, String> {
+fn collect_status(args: &Args, config: &RuntimeConfigCli) -> Result<StatusSnapshot, String> {
     let payload = if args.demo {
-        demo_payload()
+        ng::demo_payload()
     } else if let Some(path) = &args.mock {
-        load_mock(path)?
+        ng::load_mock(path)?
     } else {
-        fetch_me(&config.api_key, &config.api_base)?
+        ng::fetch_me(&config.api_key, &config.api_base, ng::USER_AGENT)?
     };
 
-    let windows = summarize_me(&payload, args.warning_threshold, args.danger_threshold);
+    let windows =
+        ng::summarize_me(&payload, args.warning_threshold, args.danger_threshold);
     let abtop = if args.with_abtop {
-        read_abtop_status(&config.abtop_bin)
+        ng::read_abtop_status(&config.abtop_bin)
     } else {
         None
     };
@@ -338,7 +309,7 @@ fn collect_status(args: &Args, config: &RuntimeConfig) -> Result<StatusSnapshot,
     Ok(StatusSnapshot {
         windows,
         abtop,
-        fetched_at: Utc::now(),
+        fetched_at: chrono::Utc::now(),
     })
 }
 
@@ -530,11 +501,11 @@ fn render_monitor_lines(
     let width = usize::from(width.max(20));
     let max_lines = usize::from(height.max(10));
     let mut lines = Vec::<String>::new();
-    let now = Utc::now().format("%H:%M:%S UTC");
+    let now = chrono::Utc::now().format("%H:%M:%S UTC");
     let title = match snapshot {
         Some(snapshot) => {
-            let level = worst_level(&snapshot.windows);
-            let peak = peak_percent_all(&snapshot.windows)
+            let level = ng::worst_level(&snapshot.windows);
+            let peak = ng::peak_percent_all(&snapshot.windows)
                 .map(|value| format!("{value:.0}%"))
                 .unwrap_or_else(|| "n/a".to_string());
             let agents = abtop_agent_summary(snapshot.abtop.as_ref());
@@ -542,7 +513,9 @@ fn render_monitor_lines(
                 "nglimit v{VERSION}  NeuroGate monitor  quota:{level} peak:{peak}  {agents}  {now}"
             )
         }
-        None => format!("nglimit v{VERSION}  NeuroGate monitor  waiting for first refresh  {now}"),
+        None => format!(
+            "nglimit v{VERSION}  NeuroGate monitor  waiting for first refresh  {now}"
+        ),
     };
     lines.push(fit_text(&title, width));
 
@@ -571,10 +544,14 @@ fn render_monitor_lines(
             lines.push(panel_line("usage rows not found in /v1/me response", width));
         }
         for window in &snapshot.windows {
-            let peak = peak_percent(window)
+            let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
                 .map(|value| format!("{value:.1}%"))
                 .unwrap_or_else(|| "n/a".to_string());
-            let bar = hbar(peak_percent(window).unwrap_or(0.0), bar_width(width));
+            let bar = hbar(
+                ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
+                    .unwrap_or(0.0),
+                bar_width(width),
+            );
             lines.push(panel_line(
                 &format!(
                     "{:<4} {:<7} {:<30} peak {:>6} reset {}",
@@ -582,7 +559,7 @@ fn render_monitor_lines(
                     window.level,
                     bar,
                     peak,
-                    format_duration(window.reset_in_seconds)
+                    ng::format_duration_opt(window.reset_in_seconds)
                 ),
                 width,
             ));
@@ -625,13 +602,13 @@ fn render_monitor_lines(
             Some(abtop) => {
                 let token_rate = abtop
                     .get("token_rate")
-                    .and_then(to_number)
+                    .and_then(ng::to_number)
                     .map(|value| format!("{value:.1}/min"))
                     .unwrap_or_else(|| "n/a".to_string());
-                let sessions_total =
-                    value_string(abtop.get("sessions_total")).unwrap_or_else(|| "?".to_string());
-                let sessions_active =
-                    value_string(abtop.get("sessions_active")).unwrap_or_else(|| "?".to_string());
+                let sessions_total = ng::value_string(abtop.get("sessions_total"))
+                    .unwrap_or_else(|| "?".to_string());
+                let sessions_active = ng::value_string(abtop.get("sessions_active"))
+                    .unwrap_or_else(|| "?".to_string());
                 lines.push(panel_line(
                     &format!(
                         "source abtop --status-json | token rate {token_rate} | sessions {sessions_total} active {sessions_active}"
@@ -803,7 +780,7 @@ impl Notifier {
         }
     }
 
-    fn check_windows(&mut self, windows: &[WindowSummary]) {
+    fn check_windows(&mut self, windows: &[ng::WindowState]) {
         if !self.enabled {
             return;
         }
@@ -822,9 +799,9 @@ impl Notifier {
 
 fn next_notification(
     last_levels: &mut HashMap<String, AlertLevel>,
-    window: &WindowSummary,
+    window: &ng::WindowState,
 ) -> Option<NotificationMessage> {
-    let level = AlertLevel::from_summary(window.level);
+    let level = AlertLevel::from_summary(&window.level);
     let previous = last_levels
         .get(window.key)
         .copied()
@@ -848,28 +825,17 @@ fn next_notification(
     })
 }
 
-fn notification_body(window: &WindowSummary) -> String {
-    let peak = peak_percent(window)
+fn notification_body(window: &ng::WindowState) -> String {
+    let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
         .map(|value| format!("{value:.1}%"))
         .unwrap_or_else(|| "n/a".to_string());
-    let credits = notification_metric("credits", window.credits.as_ref());
-    let requests = notification_metric("requests", window.requests.as_ref());
-    let reset = format_duration(window.reset_in_seconds);
+    let credits = ng::metric_text_en("credits", window.credits.as_ref());
+    let requests = ng::metric_text_en("requests", window.requests.as_ref());
+    let reset = ng::format_duration_opt(window.reset_in_seconds);
     format!(
         "{} | peak {peak} | {credits} | {requests} | reset {reset}",
         window.level
     )
-}
-
-fn notification_metric(label: &str, metric: Option<&MetricSummary>) -> String {
-    match metric {
-        Some(metric) => format!(
-            "{label} {:.1}% left {}",
-            metric.percent,
-            short_number(metric.remaining)
-        ),
-        None => format!("{label} n/a"),
-    }
 }
 
 #[cfg(windows)]
@@ -898,7 +864,7 @@ try {{
 "#,
         level = message.level.label()
     );
-    Command::new("powershell.exe")
+    std::process::Command::new("powershell.exe")
         .args([
             "-NoProfile",
             "-ExecutionPolicy",
@@ -927,7 +893,7 @@ fn fire_desktop_notification(message: &NotificationMessage) -> Result<(), String
         applescript_quote(&message.body),
         applescript_quote(&message.title)
     );
-    Command::new("osascript")
+    std::process::Command::new("osascript")
         .args(["-e", &script])
         .spawn()
         .map(|_| ())
@@ -946,7 +912,7 @@ fn fire_desktop_notification(message: &NotificationMessage) -> Result<(), String
         AlertLevel::Warning => "normal",
         AlertLevel::Ok => "low",
     };
-    Command::new("notify-send")
+    std::process::Command::new("notify-send")
         .args([
             "-a",
             "nglimit",
@@ -965,20 +931,20 @@ fn fire_desktop_notification(_message: &NotificationMessage) -> Result<(), Strin
     Err("desktop notifications are not supported on this platform".to_string())
 }
 
-fn monitor_metric(label: &str, metric: Option<&MetricSummary>) -> String {
+fn monitor_metric(label: &str, metric: Option<&ng::Metric>) -> String {
     match metric {
         Some(metric) => format!(
             "{label} {}/{} {:.1}% left {}",
-            short_number(metric.used),
-            short_number(metric.limit),
+            ng::short_number(metric.used),
+            ng::short_number(metric.limit),
             metric.percent,
-            short_number(metric.remaining)
+            ng::short_number(metric.remaining)
         ),
         None => format!("{label} n/a"),
     }
 }
 
-fn monitor_alerts(windows: &[WindowSummary], warning_threshold: f64) -> Vec<String> {
+fn monitor_alerts(windows: &[ng::WindowState], warning_threshold: f64) -> Vec<String> {
     let mut alerts = Vec::new();
     for window in windows {
         for (label, metric) in [
@@ -988,14 +954,16 @@ fn monitor_alerts(windows: &[WindowSummary], warning_threshold: f64) -> Vec<Stri
             let Some(metric) = metric else {
                 continue;
             };
-            if matches!(window.level, "warning" | "danger") && metric.percent >= warning_threshold {
+            if matches!(window.level.as_str(), "warning" | "danger")
+                && metric.percent >= warning_threshold
+            {
                 alerts.push(format!(
                     "{} {} at {:.1}%: {} left, reset {}",
                     window.level,
                     format!("{}/{}", window.key, label),
                     metric.percent,
-                    short_number(metric.remaining),
-                    format_duration(window.reset_in_seconds)
+                    ng::short_number(metric.remaining),
+                    ng::format_duration_opt(window.reset_in_seconds)
                 ));
             }
         }
@@ -1008,25 +976,26 @@ fn monitor_agent(agent: &Value) -> String {
         .get("agent_cli")
         .and_then(Value::as_str)
         .unwrap_or("agent");
-    let sessions = value_string(agent.get("sessions")).unwrap_or_else(|| "?".to_string());
-    let active = value_string(agent.get("active")).unwrap_or_else(|| "?".to_string());
-    let waiting = value_string(agent.get("waiting")).unwrap_or_else(|| "?".to_string());
+    let sessions = ng::value_string(agent.get("sessions")).unwrap_or_else(|| "?".to_string());
+    let active = ng::value_string(agent.get("active")).unwrap_or_else(|| "?".to_string());
+    let waiting = ng::value_string(agent.get("waiting")).unwrap_or_else(|| "?".to_string());
     let total_tokens = agent
         .get("total_tokens")
-        .and_then(to_number)
-        .map(short_number)
+        .and_then(ng::to_number)
+        .map(ng::short_number)
         .unwrap_or_else(|| "?".to_string());
     let active_tokens = agent
         .get("active_tokens")
-        .and_then(to_number)
-        .map(short_number)
+        .and_then(ng::to_number)
+        .map(ng::short_number)
         .unwrap_or_else(|| "?".to_string());
     let context = agent
         .get("max_context_pct")
-        .and_then(to_number)
+        .and_then(ng::to_number)
         .map(|value| format!("{value:.0}%"))
         .unwrap_or_else(|| "n/a".to_string());
-    let turns = value_string(agent.get("max_turn_count")).unwrap_or_else(|| "?".to_string());
+    let turns =
+        ng::value_string(agent.get("max_turn_count")).unwrap_or_else(|| "?".to_string());
     format!(
         "{agent_cli:<8} {sessions:>8} {active:>6} {waiting:>7} {context:>7} {total_tokens:>12} {active_tokens:>13} {turns:>5}"
     )
@@ -1036,15 +1005,17 @@ fn abtop_agent_summary(abtop: Option<&Value>) -> String {
     let Some(abtop) = abtop else {
         return "agents:n/a".to_string();
     };
-    let sessions = value_string(abtop.get("sessions_total")).unwrap_or_else(|| "?".to_string());
-    let active = value_string(abtop.get("sessions_active")).unwrap_or_else(|| "?".to_string());
+    let sessions =
+        ng::value_string(abtop.get("sessions_total")).unwrap_or_else(|| "?".to_string());
+    let active =
+        ng::value_string(abtop.get("sessions_active")).unwrap_or_else(|| "?".to_string());
     let ctx = abtop
         .get("agents")
         .and_then(Value::as_array)
         .and_then(|agents| {
             agents
                 .iter()
-                .filter_map(|agent| agent.get("max_context_pct").and_then(to_number))
+                .filter_map(|agent| agent.get("max_context_pct").and_then(ng::to_number))
                 .fold(None, |peak: Option<f64>, value| {
                     Some(peak.map_or(value, |peak| peak.max(value)))
                 })
@@ -1054,450 +1025,29 @@ fn abtop_agent_summary(abtop: Option<&Value>) -> String {
     format!("sessions:{sessions} active:{active} ctx:{ctx}")
 }
 
-fn peak_percent_all(windows: &[WindowSummary]) -> Option<f64> {
-    windows
-        .iter()
-        .filter_map(peak_percent)
-        .fold(None, |peak: Option<f64>, value| {
-            Some(peak.map_or(value, |peak| peak.max(value)))
-        })
-}
-
-fn worst_level(windows: &[WindowSummary]) -> &'static str {
-    windows
-        .iter()
-        .map(|window| window.level)
-        .max_by_key(|level| level_rank(level))
-        .unwrap_or("unknown")
-}
-
-fn level_rank(level: &str) -> u8 {
-    match level {
-        "danger" => 3,
-        "warning" => 2,
-        "ok" => 1,
-        _ => 0,
-    }
-}
-
-fn short_number(value: f64) -> String {
-    let abs = value.abs();
-    if abs >= 1_000_000_000.0 {
-        format!("{:.1}B", value / 1_000_000_000.0)
-    } else if abs >= 1_000_000.0 {
-        format!("{:.1}M", value / 1_000_000.0)
-    } else if abs >= 1_000.0 {
-        format!("{:.1}K", value / 1_000.0)
-    } else {
-        compact_number(value)
-    }
-}
-
-fn runtime_config(args: &Args, dotenv: &HashMap<String, String>) -> RuntimeConfig {
-    RuntimeConfig {
+fn runtime_config(args: &Args, dotenv: &HashMap<String, String>) -> RuntimeConfigCli {
+    RuntimeConfigCli {
         api_base: args
             .api_base
             .clone()
-            .or_else(|| config_value("NEUROGATE_API_BASE", dotenv))
-            .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
-        api_key: config_value(&args.api_key_env, dotenv).unwrap_or_default(),
-        abtop_bin: config_value("ABTOP_BIN", dotenv).unwrap_or_else(|| "abtop".to_string()),
+            .or_else(|| ng::config_value("NEUROGATE_API_BASE", dotenv))
+            .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
+        api_key: ng::config_value(&args.api_key_env, dotenv).unwrap_or_default(),
+        abtop_bin: ng::config_value("ABTOP_BIN", dotenv)
+            .unwrap_or_else(|| "abtop".to_string()),
     }
-}
-
-fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<String> {
-    env::var(key)
-        .ok()
-        .filter(|value| !value.is_empty())
-        .or_else(|| dotenv.get(key).cloned().filter(|value| !value.is_empty()))
 }
 
 fn load_dotenv_for_args(args: &Args) -> Result<HashMap<String, String>, String> {
-    let Some(path) = find_dotenv(args)? else {
-        return Ok(HashMap::new());
-    };
-    let raw = fs::read_to_string(&path)
-        .map_err(|error| format!("cannot read env file {}: {error}", path.display()))?;
-    parse_dotenv(&raw).map_err(|error| format!("{}: {error}", path.display()))
-}
-
-fn find_dotenv(args: &Args) -> Result<Option<PathBuf>, String> {
     if let Some(path) = &args.env_file {
-        if path.is_file() {
-            return Ok(Some(path.clone()));
-        }
-        return Err(format!("env file not found: {}", path.display()));
-    }
-
-    let cwd_env = PathBuf::from(".env");
-    if cwd_env.is_file() {
-        return Ok(Some(cwd_env));
-    }
-
-    if let Ok(exe) = env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let exe_env = dir.join(".env");
-            if exe_env.is_file() {
-                return Ok(Some(exe_env));
-            }
+        if !path.is_file() {
+            return Err(format!("env file not found: {}", path.display()));
         }
     }
-    Ok(None)
+    ng::load_dotenv_custom(args.env_file.as_ref())
 }
 
-fn parse_dotenv(raw: &str) -> Result<HashMap<String, String>, String> {
-    let mut values = HashMap::new();
-    for (index, line) in raw.lines().enumerate() {
-        let mut line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("export ") {
-            line = rest.trim_start();
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            return Err(format!("line {} is not KEY=VALUE", index + 1));
-        };
-        let key = key.trim();
-        if !is_env_key(key) {
-            return Err(format!("line {} has an invalid key", index + 1));
-        }
-        values.insert(key.to_string(), unquote_env_value(value.trim()).to_string());
-    }
-    Ok(values)
-}
-
-fn is_env_key(key: &str) -> bool {
-    let mut chars = key.chars();
-    matches!(chars.next(), Some(first) if first == '_' || first.is_ascii_alphabetic())
-        && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-}
-
-fn unquote_env_value(value: &str) -> &str {
-    if value.len() >= 2 {
-        let bytes = value.as_bytes();
-        if (bytes[0] == b'"' && bytes[value.len() - 1] == b'"')
-            || (bytes[0] == b'\'' && bytes[value.len() - 1] == b'\'')
-        {
-            return &value[1..value.len() - 1];
-        }
-    }
-    value
-}
-
-fn fetch_me(api_key: &str, api_base: &str) -> Result<Value, String> {
-    if api_key.is_empty() {
-        return Err("NEUROGATE_API_KEY is required unless --demo or --mock is used".to_string());
-    }
-
-    let url = format!("{}/v1/me", api_base.trim_end_matches('/'));
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent(USER_AGENT)
-        .build()
-        .map_err(|error| format!("cannot initialize HTTP client: {error}"))?;
-
-    let response = client
-        .get(url)
-        .bearer_auth(api_key)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .map_err(|error| format!("cannot reach NeuroGate API: {error}"))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!(
-            "NeuroGate /v1/me returned HTTP {}",
-            status.as_u16()
-        ));
-    }
-
-    let value: Value = response
-        .json()
-        .map_err(|error| format!("NeuroGate /v1/me returned invalid JSON: {error}"))?;
-    if !value.is_object() {
-        return Err("NeuroGate /v1/me returned a non-object JSON payload".to_string());
-    }
-    Ok(value)
-}
-
-fn load_mock(path: &str) -> Result<Value, String> {
-    let raw =
-        fs::read_to_string(path).map_err(|error| format!("cannot read mock payload: {error}"))?;
-    let value: Value = serde_json::from_str(&raw)
-        .map_err(|error| format!("mock payload is invalid JSON: {error}"))?;
-    if !value.is_object() {
-        return Err("mock payload must be a JSON object".to_string());
-    }
-    Ok(value)
-}
-
-fn demo_payload() -> Value {
-    json!({
-        "usage": {
-            "rows": [
-                {
-                    "model": "demo-model",
-                    "creditLimit5Hours": 50,
-                    "creditLimit24Hours": 180,
-                    "creditLimit7Days": 600,
-                    "creditLimit30Days": 2000,
-                    "requestLimit5Hours": 1000,
-                    "requestLimit24Hours": 4000,
-                    "requestLimit7Days": 20000,
-                    "requestLimit30Days": 80000,
-                    "credits5Hours": 39,
-                    "credits24Hours": 91,
-                    "credits7Days": 214,
-                    "credits30Days": 819,
-                    "requests5Hours": 610,
-                    "requests24Hours": 1510,
-                    "requests7Days": 8300,
-                    "requests30Days": 26000
-                }
-            ]
-        }
-    })
-}
-
-fn summarize_me(
-    payload: &Value,
-    warning_threshold: f64,
-    danger_threshold: f64,
-) -> Vec<WindowSummary> {
-    let rows = extract_usage_rows(payload);
-    let now = Utc::now();
-    let mut summaries = Vec::new();
-
-    for (key, suffix, reset_field) in WINDOWS {
-        let credits = summarize_metric(
-            &rows,
-            &format!("credits{suffix}"),
-            &format!("creditLimit{suffix}"),
-        );
-        let requests = summarize_metric(
-            &rows,
-            &format!("requests{suffix}"),
-            &format!("requestLimit{suffix}"),
-        );
-        let reset_value = first_value(&rows, reset_field);
-        let (reset_at, reset_in_seconds) = parse_reset(reset_value, now);
-
-        if credits.is_none() && requests.is_none() && reset_at.is_none() {
-            continue;
-        }
-
-        summaries.push(WindowSummary {
-            key,
-            level: window_level(
-                credits.as_ref(),
-                requests.as_ref(),
-                warning_threshold,
-                danger_threshold,
-            ),
-            credits,
-            requests,
-            reset_at,
-            reset_in_seconds,
-        });
-    }
-    summaries
-}
-
-fn extract_usage_rows(payload: &Value) -> Vec<&Map<String, Value>> {
-    if let Some(rows) = payload
-        .get("usage")
-        .and_then(Value::as_object)
-        .and_then(|usage| usage.get("rows"))
-        .and_then(Value::as_array)
-    {
-        return object_rows(rows);
-    }
-
-    if let Some(rows) = payload
-        .get("data")
-        .and_then(Value::as_object)
-        .and_then(|data| data.get("usage"))
-        .and_then(Value::as_object)
-        .and_then(|usage| usage.get("rows"))
-        .and_then(Value::as_array)
-    {
-        return object_rows(rows);
-    }
-
-    if let Some(rows) = payload
-        .as_object()
-        .and_then(|object| object.get("rows"))
-        .and_then(Value::as_array)
-    {
-        return object_rows(rows);
-    }
-
-    Vec::new()
-}
-
-fn object_rows(rows: &[Value]) -> Vec<&Map<String, Value>> {
-    rows.iter().filter_map(Value::as_object).collect()
-}
-
-fn summarize_metric(
-    rows: &[&Map<String, Value>],
-    used_field: &str,
-    limit_field: &str,
-) -> Option<MetricSummary> {
-    let mut used_total = 0.0;
-    let mut limits = Vec::<f64>::new();
-    let mut seen = false;
-
-    for row in rows {
-        let used = row.get(used_field).and_then(to_number);
-        let limit = row.get(limit_field).and_then(to_number);
-        if used.is_none() && limit.is_none() {
-            continue;
-        }
-        seen = true;
-        used_total += used.unwrap_or(0.0);
-        if let Some(limit) = limit {
-            if limit > 0.0
-                && !limits
-                    .iter()
-                    .any(|existing| (*existing - limit).abs() < f64::EPSILON)
-            {
-                limits.push(limit);
-            }
-        }
-    }
-
-    let limit_total: f64 = limits.iter().sum();
-    if !seen || limit_total <= 0.0 {
-        return None;
-    }
-
-    let remaining = (limit_total - used_total).max(0.0);
-    let percent = ((used_total / limit_total) * 100.0).clamp(0.0, 999.0);
-    Some(MetricSummary {
-        used: used_total,
-        limit: limit_total,
-        remaining,
-        percent,
-    })
-}
-
-fn first_value<'a>(rows: &[&'a Map<String, Value>], field: &str) -> Option<&'a Value> {
-    rows.iter().find_map(|row| match row.get(field) {
-        Some(Value::Null) | None => None,
-        Some(Value::String(text)) if text.is_empty() => None,
-        value => value,
-    })
-}
-
-fn to_number(value: &Value) -> Option<f64> {
-    match value {
-        Value::Number(number) => number.as_f64(),
-        Value::String(text) => text.parse::<f64>().ok(),
-        _ => None,
-    }
-}
-
-fn parse_reset(value: Option<&Value>, now: DateTime<Utc>) -> (Option<String>, Option<i64>) {
-    let Some(value) = value else {
-        return (None, None);
-    };
-
-    let datetime = match value {
-        Value::Number(number) => number
-            .as_i64()
-            .and_then(|timestamp| Utc.timestamp_opt(timestamp, 0).single()),
-        Value::String(text) => {
-            let raw = text.trim();
-            if raw.is_empty() {
-                return (None, None);
-            }
-            if let Ok(timestamp) = raw.parse::<i64>() {
-                Utc.timestamp_opt(timestamp, 0).single()
-            } else {
-                DateTime::parse_from_rfc3339(raw)
-                    .map(|datetime| datetime.with_timezone(&Utc))
-                    .ok()
-            }
-        }
-        _ => None,
-    };
-
-    if let Some(datetime) = datetime {
-        let seconds = (datetime - now).num_seconds().max(0);
-        (
-            Some(datetime.to_rfc3339_opts(SecondsFormat::Secs, true)),
-            Some(seconds),
-        )
-    } else {
-        (Some(value.to_string()), None)
-    }
-}
-
-fn window_level(
-    credits: Option<&MetricSummary>,
-    requests: Option<&MetricSummary>,
-    warning_threshold: f64,
-    danger_threshold: f64,
-) -> &'static str {
-    let peak = [credits, requests]
-        .into_iter()
-        .flatten()
-        .map(|metric| metric.percent)
-        .fold(None, |peak: Option<f64>, percent| {
-            Some(peak.map_or(percent, |peak| peak.max(percent)))
-        });
-
-    match peak {
-        Some(peak) if peak >= danger_threshold => "danger",
-        Some(peak) if peak >= warning_threshold => "warning",
-        Some(_) => "ok",
-        None => "unknown",
-    }
-}
-
-fn summary_to_json(windows: &[WindowSummary], abtop: Option<&Value>) -> Value {
-    json!({
-        "source": "neurogate",
-        "windows": windows.iter().map(window_to_json).collect::<Vec<_>>(),
-        "abtop": abtop.cloned().unwrap_or(Value::Null),
-    })
-}
-
-fn window_to_json(window: &WindowSummary) -> Value {
-    json!({
-        "window": window.key,
-        "level": window.level,
-        "reset_at": window.reset_at,
-        "reset_in_seconds": window.reset_in_seconds,
-        "credits": metric_to_json(window.credits.as_ref()),
-        "requests": metric_to_json(window.requests.as_ref()),
-    })
-}
-
-fn metric_to_json(metric: Option<&MetricSummary>) -> Value {
-    match metric {
-        Some(metric) => json!({
-            "used": metric.used,
-            "limit": metric.limit,
-            "remaining": metric.remaining,
-            "percent": metric.percent,
-        }),
-        None => Value::Null,
-    }
-}
-
-fn read_abtop_status(binary: &str) -> Option<Value> {
-    let output = Command::new(binary).arg("--status-json").output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let parsed: Value = serde_json::from_slice(&output.stdout).ok()?;
-    parsed.is_object().then_some(parsed)
-}
-
-fn print_human(windows: &[WindowSummary], abtop: Option<&Value>) {
+fn print_human(windows: &[ng::WindowState], abtop: Option<&Value>) {
     println!("NeuroGate limits");
     if windows.is_empty() {
         println!("  usage rows not found in /v1/me response");
@@ -1507,13 +1057,13 @@ fn print_human(windows: &[WindowSummary], abtop: Option<&Value>) {
             "  {:<4} {:<7} reset {}",
             window.key,
             window.level,
-            format_duration(window.reset_in_seconds)
+            ng::format_duration_opt(window.reset_in_seconds)
         );
         if let Some(metric) = &window.credits {
-            println!("       credits  {}", format_metric(metric));
+            println!("       credits  {}", ng::format_metric(metric));
         }
         if let Some(metric) = &window.requests {
-            println!("       requests {}", format_metric(metric));
+            println!("       requests {}", ng::format_metric(metric));
         }
     }
 
@@ -1529,10 +1079,10 @@ fn print_human(windows: &[WindowSummary], abtop: Option<&Value>) {
     }
 }
 
-fn print_compact(windows: &[WindowSummary], abtop: Option<&Value>) {
+fn print_compact(windows: &[ng::WindowState], abtop: Option<&Value>) {
     let mut parts = vec!["NG".to_string()];
     for window in windows {
-        let peak = peak_percent(window)
+        let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
             .map(|value| format!("{value:.0}%"))
             .unwrap_or_else(|| "n/a".to_string());
         parts.push(format!("{}:{}:{}", window.key, window.level, peak));
@@ -1544,7 +1094,7 @@ fn print_compact(windows: &[WindowSummary], abtop: Option<&Value>) {
                     .get("agent_cli")
                     .and_then(Value::as_str)
                     .unwrap_or("agent");
-                if let Some(ctx) = agent.get("max_context_pct").and_then(to_number) {
+                if let Some(ctx) = agent.get("max_context_pct").and_then(ng::to_number) {
                     parts.push(format!("{agent_cli}:ctx{ctx:.0}%"));
                 }
             }
@@ -1553,72 +1103,26 @@ fn print_compact(windows: &[WindowSummary], abtop: Option<&Value>) {
     println!("{}", parts.join(" "));
 }
 
-fn peak_percent(window: &WindowSummary) -> Option<f64> {
-    [window.credits.as_ref(), window.requests.as_ref()]
-        .into_iter()
-        .flatten()
-        .map(|metric| metric.percent)
-        .fold(None, |peak: Option<f64>, percent| {
-            Some(peak.map_or(percent, |peak| peak.max(percent)))
-        })
-}
-
-fn format_metric(metric: &MetricSummary) -> String {
-    format!(
-        "{}/{} ({:.1}%, left {})",
-        compact_number(metric.used),
-        compact_number(metric.limit),
-        metric.percent,
-        compact_number(metric.remaining)
-    )
-}
-
-fn compact_number(value: f64) -> String {
-    if (value.fract()).abs() < f64::EPSILON {
-        format!("{}", value as i64)
-    } else {
-        format!("{value:.2}")
-    }
-}
-
-fn format_duration(seconds: Option<i64>) -> String {
-    match seconds {
-        None => "unknown".to_string(),
-        Some(seconds) if seconds < 60 => format!("in {seconds}s"),
-        Some(seconds) if seconds < 3600 => format!("in {}m", seconds / 60),
-        Some(seconds) if seconds < 86_400 => {
-            format!("in {}h {}m", seconds / 3600, (seconds % 3600) / 60)
-        }
-        Some(seconds) => format!("in {}d {}h", seconds / 86_400, (seconds % 86_400) / 3600),
-    }
-}
-
 fn format_agent(agent: &Value) -> String {
     let agent_cli = agent
         .get("agent_cli")
         .and_then(Value::as_str)
         .unwrap_or("agent");
-    let sessions = value_string(agent.get("sessions")).unwrap_or_else(|| "?".to_string());
-    let active = value_string(agent.get("active")).unwrap_or_else(|| "?".to_string());
-    let tokens = value_string(agent.get("active_tokens")).unwrap_or_else(|| "?".to_string());
+    let sessions =
+        ng::value_string(agent.get("sessions")).unwrap_or_else(|| "?".to_string());
+    let active =
+        ng::value_string(agent.get("active")).unwrap_or_else(|| "?".to_string());
+    let tokens =
+        ng::value_string(agent.get("active_tokens")).unwrap_or_else(|| "?".to_string());
     let context = agent
         .get("max_context_pct")
-        .and_then(to_number)
+        .and_then(ng::to_number)
         .map(|value| format!("{value:.0}%"))
         .unwrap_or_else(|| "n/a".to_string());
     format!("{agent_cli:<8} sessions {sessions:<2} active {active:<2} ctx max {context} tokens {tokens}")
 }
 
-fn value_string(value: Option<&Value>) -> Option<String> {
-    match value? {
-        Value::Number(number) => Some(number.to_string()),
-        Value::String(text) => Some(text.clone()),
-        Value::Bool(flag) => Some(flag.to_string()),
-        _ => None,
-    }
-}
-
-fn exit_code(windows: &[WindowSummary], fail_on: FailOn) -> i32 {
+fn exit_code(windows: &[ng::WindowState], fail_on: FailOn) -> i32 {
     match fail_on {
         FailOn::Never => 0,
         FailOn::Danger => windows
@@ -1628,7 +1132,7 @@ fn exit_code(windows: &[WindowSummary], fail_on: FailOn) -> i32 {
             .unwrap_or(0),
         FailOn::Warning => windows
             .iter()
-            .any(|window| matches!(window.level, "warning" | "danger"))
+            .any(|window| matches!(window.level.as_str(), "warning" | "danger"))
             .then_some(2)
             .unwrap_or(0),
     }
@@ -1637,10 +1141,13 @@ fn exit_code(windows: &[WindowSummary], fail_on: FailOn) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
+    use serde_json::json;
 
     #[test]
-    fn summarizes_credit_and_request_windows() {
-        let windows = summarize_me(&demo_payload(), 75.0, 90.0);
+    fn summarized_windows_match_demo() {
+        let windows =
+            ng::summarize_me(&ng::demo_payload(), 75.0, 90.0);
 
         assert_eq!(
             windows.iter().map(|window| window.key).collect::<Vec<_>>(),
@@ -1661,7 +1168,7 @@ mod tests {
             }
         });
 
-        let windows = summarize_me(&payload, 75.0, 90.0);
+        let windows = ng::summarize_me(&payload, 75.0, 90.0);
 
         let credits = windows[0].credits.as_ref().unwrap();
         assert_eq!(credits.used, 30.0);
@@ -1675,7 +1182,8 @@ mod tests {
             "id": "usr_demo",
             "usage": {"rows": [{"credits5Hours": 39, "creditLimit5Hours": 50}]}
         });
-        let encoded = summary_to_json(&summarize_me(&payload, 75.0, 90.0), None).to_string();
+        let encoded =
+            ng::summary_to_json(&ng::summarize_me(&payload, 75.0, 90.0), None).to_string();
 
         assert!(encoded.contains("\"source\":\"neurogate\""));
         assert!(!encoded.contains("usr_demo"));
@@ -1684,31 +1192,33 @@ mod tests {
     #[test]
     fn fail_on_warning_catches_warning_and_danger() {
         let windows = vec![
-            WindowSummary {
+            ng::WindowState {
                 key: "5h",
-                credits: Some(MetricSummary {
+                credits: Some(ng::Metric {
                     used: 10.0,
                     limit: 100.0,
                     remaining: 90.0,
                     percent: 10.0,
                 }),
                 requests: None,
-                reset_at: None,
+                reset: "unknown".to_string(),
                 reset_in_seconds: None,
-                level: "ok",
+                level: "ok".to_string(),
+                percent: 10.0,
             },
-            WindowSummary {
+            ng::WindowState {
                 key: "7d",
-                credits: Some(MetricSummary {
+                credits: Some(ng::Metric {
                     used: 95.0,
                     limit: 100.0,
                     remaining: 5.0,
                     percent: 95.0,
                 }),
                 requests: None,
-                reset_at: None,
+                reset: "unknown".to_string(),
                 reset_in_seconds: None,
-                level: "danger",
+                level: "danger".to_string(),
+                percent: 95.0,
             },
         ];
 
@@ -1719,14 +1229,14 @@ mod tests {
 
     #[test]
     fn custom_thresholds_change_window_level() {
-        let windows = summarize_me(&demo_payload(), 80.0, 95.0);
+        let windows = ng::summarize_me(&ng::demo_payload(), 80.0, 95.0);
 
         assert_eq!(windows[0].level, "ok");
     }
 
     #[test]
     fn parses_dotenv_without_leaking_comments() {
-        let parsed = parse_dotenv(
+        let parsed = ng::parse_dotenv(
             r#"
             # comment
             export NEUROGATE_API_KEY="demo"
@@ -1746,15 +1256,18 @@ mod tests {
 
     #[test]
     fn compact_output_uses_peak_percent() {
-        let windows = summarize_me(&demo_payload(), 75.0, 90.0);
+        let windows = ng::summarize_me(&ng::demo_payload(), 75.0, 90.0);
 
-        assert_eq!(peak_percent(&windows[0]).unwrap(), 78.0);
+        assert_eq!(
+            ng::peak_percent(windows[0].credits.as_ref(), windows[0].requests.as_ref()).unwrap(),
+            78.0
+        );
     }
 
     #[test]
     fn monitor_output_has_dashboard_sections() {
         let snapshot = StatusSnapshot {
-            windows: summarize_me(&demo_payload(), 75.0, 90.0),
+            windows: ng::summarize_me(&ng::demo_payload(), 75.0, 90.0),
             abtop: Some(json!({
                 "token_rate": 42.0,
                 "sessions_total": 2,
@@ -1770,7 +1283,7 @@ mod tests {
                     "max_turn_count": 12
                 }]
             })),
-            fetched_at: Utc.timestamp_opt(0, 0).single().unwrap(),
+            fetched_at: chrono::Utc.timestamp_opt(0, 0).single().unwrap(),
         };
 
         let rendered = render_monitor(Some(&snapshot), None, 100, 30, 5, 4, true, 75.0);
@@ -1809,34 +1322,41 @@ mod tests {
         let ok = test_window("5h", "ok", 12.0);
 
         assert_eq!(
-            next_notification(&mut last_levels, &warning).unwrap().level,
+            next_notification(&mut last_levels, &warning)
+                .unwrap()
+                .level,
             AlertLevel::Warning
         );
         assert!(next_notification(&mut last_levels, &warning).is_none());
         assert_eq!(
-            next_notification(&mut last_levels, &danger).unwrap().level,
+            next_notification(&mut last_levels, &danger)
+                .unwrap()
+                .level,
             AlertLevel::Danger
         );
         assert!(next_notification(&mut last_levels, &ok).is_none());
         assert_eq!(
-            next_notification(&mut last_levels, &warning).unwrap().level,
+            next_notification(&mut last_levels, &warning)
+                .unwrap()
+                .level,
             AlertLevel::Warning
         );
     }
 
-    fn test_window(key: &'static str, level: &'static str, percent: f64) -> WindowSummary {
-        WindowSummary {
+    fn test_window(key: &'static str, level: &'static str, percent: f64) -> ng::WindowState {
+        ng::WindowState {
             key,
-            credits: Some(MetricSummary {
+            credits: Some(ng::Metric {
                 used: percent,
                 limit: 100.0,
                 remaining: 100.0 - percent,
                 percent,
             }),
             requests: None,
-            reset_at: None,
+            reset: "unknown".to_string(),
             reset_in_seconds: Some(3600),
-            level,
+            level: level.to_string(),
+            percent,
         }
     }
 }
