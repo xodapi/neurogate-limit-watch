@@ -1,6 +1,5 @@
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 use std::collections::HashMap;
-use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
@@ -516,36 +515,6 @@ slint::slint! {
                     dimmed: root.period-mode == 1 || (root.risk-only && root.month-percent < 75);
                 }
                 }
-
-                HorizontalLayout {
-                    visible: false;
-                    spacing: 12px;
-                    height: 0px;
-
-                Button {
-                    text: "Обновить";
-                    clicked => { root.refresh-requested(); }
-                }
-
-                Button {
-                    text: "Демо";
-                    clicked => { root.demo-requested(); }
-                }
-
-                Button {
-                    text: root.settings-open ? "Скрыть настройки" : "Настройки";
-                    clicked => { root.settings-open = !root.settings-open; }
-                }
-
-                    Rectangle { }
-
-                    Text {
-                        text: root.footer-text;
-                        color: #808aa0;
-                        font-size: 13px;
-                        vertical-alignment: center;
-                    }
-                }
             }
         }
     }
@@ -553,30 +522,34 @@ slint::slint! {
 
 fn main() {
     let app = AppWindow::new().expect("cannot initialize Slint window");
+    let http = std::sync::Arc::new(ng::HttpClient::new(ng::USER_AGENT_GUI).expect("cannot initialize HTTP client"));
 
     let weak = app.as_weak();
+    let http_clone = http.clone();
     app.on_refresh_requested(move || {
-        start_refresh(weak.clone(), false);
+        start_refresh(weak.clone(), false, http_clone.clone());
     });
 
     let weak = app.as_weak();
+    let http_clone = http.clone();
     app.on_demo_requested(move || {
-        start_refresh(weak.clone(), true);
+        start_refresh(weak.clone(), true, http_clone.clone());
     });
 
     let timer = Timer::default();
     let weak = app.as_weak();
+    let http_clone = http.clone();
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
-        start_refresh(weak.clone(), false);
+        start_refresh(weak.clone(), false, http_clone.clone());
     });
 
-    start_refresh(app.as_weak(), false);
+    start_refresh(app.as_weak(), false, http);
     app.run().expect("Slint event loop failed");
 }
 
-fn start_refresh(app: Weak<AppWindow>, demo: bool) {
+fn start_refresh(app: Weak<AppWindow>, demo: bool, http: std::sync::Arc<ng::HttpClient>) {
     thread::spawn(move || {
-        let result = load_dashboard(demo);
+        let result = load_dashboard(demo, &http);
         let _ = app.upgrade_in_event_loop(move |app| {
             apply_dashboard(&app, result);
         });
@@ -640,26 +613,56 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let request_percent = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
         .unwrap_or(0.0) as f32;
 
-    let (set_level, set_reset, set_credits, set_requests, set_rate, set_ptext, set_pct, set_cp, set_rp) = match key {
-        "5h" => (app.set_five_level, app.set_five_reset, app.set_five_credits, app.set_five_requests, app.set_five_rate, app.set_five_percent_text, app.set_five_percent, app.set_five_credit_percent, app.set_five_request_percent),
-        "24h" => (app.set_day_level, app.set_day_reset, app.set_day_credits, app.set_day_requests, app.set_day_rate, app.set_day_percent_text, app.set_day_percent, app.set_day_credit_percent, app.set_day_request_percent),
-        "7d" => (app.set_week_level, app.set_week_reset, app.set_week_credits, app.set_week_requests, app.set_week_rate, app.set_week_percent_text, app.set_week_percent, app.set_week_credit_percent, app.set_week_request_percent),
-        "30d" => (app.set_month_level, app.set_month_reset, app.set_month_credits, app.set_month_requests, app.set_month_rate, app.set_month_percent_text, app.set_month_percent, app.set_month_credit_percent, app.set_month_request_percent),
-        _ => return,
-    };
-
-    set_level(level);
-    set_reset(reset);
-    set_credits(credits);
-    set_requests(requests);
-    set_rate("".into());
-    set_ptext(percent_text);
-    set_pct(percent);
-    set_cp(credit_percent);
-    set_rp(request_percent);
+    match key {
+        "5h" => {
+            app.set_five_level(level);
+            app.set_five_reset(reset);
+            app.set_five_credits(credits);
+            app.set_five_requests(requests);
+            app.set_five_rate("".into());
+            app.set_five_percent_text(percent_text);
+            app.set_five_percent(percent);
+            app.set_five_credit_percent(credit_percent);
+            app.set_five_request_percent(request_percent);
+        }
+        "24h" => {
+            app.set_day_level(level);
+            app.set_day_reset(reset);
+            app.set_day_credits(credits);
+            app.set_day_requests(requests);
+            app.set_day_rate("".into());
+            app.set_day_percent_text(percent_text);
+            app.set_day_percent(percent);
+            app.set_day_credit_percent(credit_percent);
+            app.set_day_request_percent(request_percent);
+        }
+        "7d" => {
+            app.set_week_level(level);
+            app.set_week_reset(reset);
+            app.set_week_credits(credits);
+            app.set_week_requests(requests);
+            app.set_week_rate("".into());
+            app.set_week_percent_text(percent_text);
+            app.set_week_percent(percent);
+            app.set_week_credit_percent(credit_percent);
+            app.set_week_request_percent(request_percent);
+        }
+        "30d" => {
+            app.set_month_level(level);
+            app.set_month_reset(reset);
+            app.set_month_credits(credits);
+            app.set_month_requests(requests);
+            app.set_month_rate("".into());
+            app.set_month_percent_text(percent_text);
+            app.set_month_percent(percent);
+            app.set_month_credit_percent(credit_percent);
+            app.set_month_request_percent(request_percent);
+        }
+        _ => {}
+    }
 }
 
-fn load_dashboard(force_demo: bool) -> Result<ng::Dashboard, String> {
+fn load_dashboard(force_demo: bool, http: &ng::HttpClient) -> Result<ng::Dashboard, String> {
     let dotenv = ng::load_dotenv_custom(None)?;
     let config = runtime_config(&dotenv);
     let (payload, source) = if force_demo {
@@ -674,7 +677,7 @@ fn load_dashboard(force_demo: bool) -> Result<ng::Dashboard, String> {
         )
     } else {
         (
-            ng::fetch_me(&config.api_key, &config.api_base, ng::USER_AGENT_GUI)?,
+            http.fetch_me(&config.api_key, &config.api_base)?,
             format!("источник: live NeuroGate /v1/me на {}", config.api_base),
         )
     };

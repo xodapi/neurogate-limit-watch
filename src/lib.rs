@@ -58,6 +58,29 @@ pub struct RuntimeConfig {
     pub abtop_bin: String,
 }
 
+impl RuntimeConfig {
+    pub fn from_dotenv(
+        api_base_override: Option<String>,
+        api_key_env: &str,
+        env_file: Option<&PathBuf>,
+    ) -> Result<Self, String> {
+        if let Some(path) = env_file {
+            if !path.is_file() {
+                return Err(format!("env file not found: {}", path.display()));
+            }
+        }
+        let dotenv = load_dotenv_custom(env_file)?;
+        Ok(Self {
+            api_base: api_base_override
+                .or_else(|| config_value("NEUROGATE_API_BASE", &dotenv))
+                .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
+            api_key: config_value(api_key_env, &dotenv).unwrap_or_default(),
+            abtop_bin: config_value("ABTOP_BIN", &dotenv)
+                .unwrap_or_else(|| "abtop".to_string()),
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Dashboard {
     pub source: String,
@@ -75,40 +98,57 @@ pub struct AgentStatus {
 
 // ── API ─────────────────────────────────────────────────────────────────────
 
+pub struct HttpClient {
+    client: reqwest::blocking::Client,
+}
+
+impl HttpClient {
+    pub fn new(user_agent: &str) -> Result<Self, String> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .user_agent(user_agent)
+            .build()
+            .map_err(|error| format!("cannot initialize HTTP client: {error}"))?;
+        Ok(Self { client })
+    }
+
+    pub fn fetch_me(&self, api_key: &str, api_base: &str) -> Result<Value, String> {
+        if api_key.is_empty() {
+            return Err(
+                "NEUROGATE_API_KEY is required unless --demo or --mock is used".to_string(),
+            );
+        }
+
+        let url = format!("{}/v1/me", api_base.trim_end_matches('/'));
+        let response = self
+            .client
+            .get(url)
+            .bearer_auth(api_key)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .send()
+            .map_err(|error| format!("cannot reach NeuroGate API: {error}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!(
+                "NeuroGate /v1/me returned HTTP {}",
+                status.as_u16()
+            ));
+        }
+
+        let value: Value = response
+            .json()
+            .map_err(|error| format!("NeuroGate /v1/me returned invalid JSON: {error}"))?;
+        if !value.is_object() {
+            return Err("NeuroGate /v1/me returned a non-object JSON payload".to_string());
+        }
+        Ok(value)
+    }
+}
+
 pub fn fetch_me(api_key: &str, api_base: &str, user_agent: &str) -> Result<Value, String> {
-    if api_key.is_empty() {
-        return Err("NEUROGATE_API_KEY is required unless --demo or --mock is used".to_string());
-    }
-
-    let url = format!("{}/v1/me", api_base.trim_end_matches('/'));
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent(user_agent)
-        .build()
-        .map_err(|error| format!("cannot initialize HTTP client: {error}"))?;
-
-    let response = client
-        .get(url)
-        .bearer_auth(api_key)
-        .header(reqwest::header::ACCEPT, "application/json")
-        .send()
-        .map_err(|error| format!("cannot reach NeuroGate API: {error}"))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!(
-            "NeuroGate /v1/me returned HTTP {}",
-            status.as_u16()
-        ));
-    }
-
-    let value: Value = response
-        .json()
-        .map_err(|error| format!("NeuroGate /v1/me returned invalid JSON: {error}"))?;
-    if !value.is_object() {
-        return Err("NeuroGate /v1/me returned a non-object JSON payload".to_string());
-    }
-    Ok(value)
+    let http = HttpClient::new(user_agent)?;
+    http.fetch_me(api_key, api_base)
 }
 
 pub fn load_mock(path: &str) -> Result<Value, String> {
