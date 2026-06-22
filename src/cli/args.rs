@@ -17,6 +17,13 @@ pub enum OutputMode {
     Compact,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Preset {
+    Full,
+    Compact,
+    Mini,
+}
+
 #[derive(Debug)]
 pub struct Args {
     pub api_base: Option<String>,
@@ -26,6 +33,7 @@ pub struct Args {
     pub mock: Option<String>,
     pub output: OutputMode,
     pub monitor: bool,
+    pub preset: Preset,
     pub with_abtop: bool,
     pub notify: bool,
     pub watch: u64,
@@ -49,6 +57,7 @@ where
         mock: None,
         output: OutputMode::Human,
         monitor: false,
+        preset: Preset::Full,
         with_abtop: false,
         notify: false,
         watch: 0,
@@ -69,6 +78,18 @@ where
             "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
             "--monitor" => parsed.monitor = true,
+            "--preset" => {
+                parsed.preset = match next_value(&mut iter, "--preset")?.as_str() {
+                    "full" => Preset::Full,
+                    "compact" => Preset::Compact,
+                    "mini" => Preset::Mini,
+                    other => {
+                        return Err(format!(
+                            "--preset must be one of: full, compact, mini; got {other}"
+                        ));
+                    }
+                };
+            }
             "--with-abtop" => parsed.with_abtop = true,
             "--notify" => parsed.notify = true,
             "--api-base" => parsed.api_base = Some(next_value(&mut iter, "--api-base")?),
@@ -198,6 +219,7 @@ OPTIONS:
       --json                 Print machine-readable JSON
       --compact              Print one-line output for widgets/status bars
       --monitor              Full-screen live dashboard, abtop-style
+      --preset <LAYOUT>      Monitor layout: full (default), compact, mini
       --with-abtop           Merge local abtop --status-json output if available
       --notify               Desktop alert when a window enters warning/danger
       --watch <SECONDS>      Poll every N seconds; default is 5 in --monitor
@@ -318,5 +340,17 @@ mod tests {
         ])
         .unwrap_err();
         assert!(error.contains("format"));
+    }
+
+    #[test]
+    fn preset_parses_valid_values() {
+        let args = parse_args(["--preset".to_string(), "compact".to_string()]).unwrap();
+        assert!(matches!(args.preset, Preset::Compact));
+    }
+
+    #[test]
+    fn preset_rejects_invalid_value() {
+        let error = parse_args(["--preset".to_string(), "wide".to_string()]).unwrap_err();
+        assert!(error.contains("--preset must be one of"));
     }
 }

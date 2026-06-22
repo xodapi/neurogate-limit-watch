@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use neurogate_limit_watch::{self as ng, VERSION};
 
-use super::args::Args;
+use super::args::{Args, Preset};
 use super::notify::Notifier;
 
 const SPARKLINE_LEN: usize = 20;
@@ -116,6 +116,7 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                     args.with_abtop,
                     args.warning_threshold,
                     &window_history,
+                    args.preset,
                 );
             })
             .map_err(|error| format!("cannot draw terminal frame: {error}"))?;
@@ -148,14 +149,20 @@ fn draw_frame(
     with_abtop: bool,
     warning_threshold: f64,
     window_history: &HashMap<&str, WindowHistory>,
+    preset: Preset,
 ) {
     let area = frame.area();
+    let (header_len, footer_len) = match preset {
+        Preset::Mini => (1, 1),
+        Preset::Compact => (2, 1),
+        Preset::Full => (3, 3),
+    };
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
-            Constraint::Min(10),
-            Constraint::Length(3),
+            Constraint::Length(header_len),
+            Constraint::Min(4),
+            Constraint::Length(footer_len),
         ])
         .split(area);
 
@@ -168,6 +175,7 @@ fn draw_frame(
         with_abtop,
         warning_threshold,
         window_history,
+        preset,
     );
     draw_footer(frame, chunks[2], interval_secs, next_refresh_secs);
 }
@@ -210,17 +218,22 @@ fn draw_body(
     _with_abtop: bool,
     warning_threshold: f64,
     window_history: &HashMap<&str, WindowHistory>,
+    preset: Preset,
 ) {
+    let (alerts_height, cols) = match preset {
+        Preset::Mini => (1, 1),
+        Preset::Compact => (2, 1),
+        Preset::Full => (5, 2),
+    };
     let body_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(6), Constraint::Length(5)])
+        .constraints([Constraint::Min(4), Constraint::Length(alerts_height)])
         .split(area);
 
     let windows_area = body_chunks[0];
     let alerts_area = body_chunks[1];
 
     if let Some(snapshot) = snapshot {
-        let cols = 2u16;
         let rows = ((snapshot.windows.len() as u16 + cols - 1) / cols).max(1);
         let mut row_constraints = Vec::new();
         for _ in 0..rows {
@@ -235,16 +248,22 @@ fn draw_body(
         for (i, window) in snapshot.windows.iter().enumerate() {
             let row = (i as u16) / cols;
             let col = (i as u16) % cols;
-            let col_chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50); 2])
-                .split(grid[row as usize]);
+            let cell = if cols == 1 {
+                grid[row as usize]
+            } else {
+                let col_chunks = Layout::default()
+                    .direction(Direction::Horizontal)
+                    .constraints([Constraint::Percentage(50); 2])
+                    .split(grid[row as usize]);
+                col_chunks[col as usize]
+            };
             draw_window_card(
                 frame,
-                col_chunks[col as usize],
+                cell,
                 window,
                 window_history.get(window.key),
                 warning_threshold,
+                preset,
             );
         }
     } else {
@@ -275,6 +294,7 @@ fn draw_window_card(
     window: &ng::WindowState,
     history: Option<&WindowHistory>,
     _warning_threshold: f64,
+    preset: Preset,
 ) {
     let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
         .unwrap_or(0.0);
@@ -296,65 +316,130 @@ fn draw_window_card(
     };
 
     let reset_text = ng::format_duration_opt(window.reset_in_seconds);
-    let title = format!(" {} | {} | reset {} ", window.key, window.level, reset_text);
 
-    let inner = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Length(2),
-            Constraint::Min(2),
-        ])
-        .margin(1)
-        .split(area);
+    match preset {
+        Preset::Mini => {
+            let line = Line::from(vec![
+                Span::styled(
+                    format!("{} ", window.key),
+                    Style::default().fg(border_color).add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{:.0}%", peak),
+                    Style::default().fg(border_color),
+                ),
+                Span::raw(format!(" reset {}", reset_text)),
+            ]);
+            let widget = Paragraph::new(line).block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_color)),
+            );
+            frame.render_widget(widget, area);
+        }
+        Preset::Compact => {
+            let title = format!(" {} | {} ", window.key, window.level);
+            let inner = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(3), Constraint::Min(1)])
+                .margin(1)
+                .split(area);
 
-    let gauge = Gauge::default()
-        .block(
-            Block::default()
-                .title(title)
-                .title_style(title_style)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(border_color)),
-        )
-        .gauge_style(Style::default().fg(border_color))
-        .ratio((peak / 100.0) as f64);
-    frame.render_widget(gauge, inner[0]);
+            let gauge = Gauge::default()
+                .block(
+                    Block::default()
+                        .title(title)
+                        .title_style(title_style)
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(border_color)),
+                )
+                .gauge_style(Style::default().fg(border_color))
+                .ratio((peak / 100.0) as f64);
+            frame.render_widget(gauge, inner[0]);
 
-    let credit_line = match &window.credits {
-        Some(m) => Line::from(vec![
-            Span::styled("cr ", Style::default().fg(Color::DarkGray)),
-            Span::raw(format!(
-                "{}/{} ({:.0}%)",
-                ng::short_number(m.used),
-                ng::short_number(m.limit),
-                m.percent
-            )),
-        ]),
-        None => Line::from(Span::styled("cr n/a", Style::default().fg(Color::DarkGray))),
-    };
-    let request_line = match &window.requests {
-        Some(m) => Line::from(vec![
-            Span::styled("rq ", Style::default().fg(Color::DarkGray)),
-            Span::raw(format!(
-                "{}/{} ({:.0}%)",
-                ng::short_number(m.used),
-                ng::short_number(m.limit),
-                m.percent
-            )),
-        ]),
-        None => Line::from(Span::styled("rq n/a", Style::default().fg(Color::DarkGray))),
-    };
-    let metrics = Paragraph::new(vec![credit_line, request_line]);
-    frame.render_widget(metrics, inner[1]);
+            let credit_line = match &window.credits {
+                Some(m) => Line::from(Span::raw(format!(
+                    "cr {}/{} ({:.0}%)",
+                    ng::short_number(m.used),
+                    ng::short_number(m.limit),
+                    m.percent
+                ))),
+                None => Line::from(Span::raw("cr n/a")),
+            };
+            let request_line = match &window.requests {
+                Some(m) => Line::from(Span::raw(format!(
+                    "rq {}/{} ({:.0}%)",
+                    ng::short_number(m.used),
+                    ng::short_number(m.limit),
+                    m.percent
+                ))),
+                None => Line::from(Span::raw("rq n/a")),
+            };
+            let metrics = Paragraph::new(vec![credit_line, request_line]);
+            frame.render_widget(metrics, inner[1]);
+        }
+        Preset::Full => {
+            let title = format!(" {} | {} | reset {} ", window.key, window.level, reset_text);
 
-    if let Some(hist) = history {
-        let values = hist.sparkline_values();
-        if !values.is_empty() {
-            let spark = Sparkline::default()
-                .block(Block::default().title("history"))
-                .data(&values)
-                .style(Style::default().fg(border_color));
-            frame.render_widget(spark, inner[2]);
+            let inner = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),
+                    Constraint::Length(2),
+                    Constraint::Min(2),
+                ])
+                .margin(1)
+                .split(area);
+
+            let gauge = Gauge::default()
+                .block(
+                    Block::default()
+                        .title(title)
+                        .title_style(title_style)
+                        .borders(Borders::ALL)
+                        .border_style(Style::default().fg(border_color)),
+                )
+                .gauge_style(Style::default().fg(border_color))
+                .ratio((peak / 100.0) as f64);
+            frame.render_widget(gauge, inner[0]);
+
+            let credit_line = match &window.credits {
+                Some(m) => Line::from(vec![
+                    Span::styled("cr ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(format!(
+                        "{}/{} ({:.0}%)",
+                        ng::short_number(m.used),
+                        ng::short_number(m.limit),
+                        m.percent
+                    )),
+                ]),
+                None => Line::from(Span::styled("cr n/a", Style::default().fg(Color::DarkGray))),
+            };
+            let request_line = match &window.requests {
+                Some(m) => Line::from(vec![
+                    Span::styled("rq ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(format!(
+                        "{}/{} ({:.0}%)",
+                        ng::short_number(m.used),
+                        ng::short_number(m.limit),
+                        m.percent
+                    )),
+                ]),
+                None => Line::from(Span::styled("rq n/a", Style::default().fg(Color::DarkGray))),
+            };
+            let metrics = Paragraph::new(vec![credit_line, request_line]);
+            frame.render_widget(metrics, inner[1]);
+
+            if let Some(hist) = history {
+                let values = hist.sparkline_values();
+                if !values.is_empty() {
+                    let spark = Sparkline::default()
+                        .block(Block::default().title("history"))
+                        .data(&values)
+                        .style(Style::default().fg(border_color));
+                    frame.render_widget(spark, inner[2]);
+                }
+            }
         }
     }
 }
@@ -407,25 +492,32 @@ fn draw_footer(
     interval_secs: u64,
     next_refresh_secs: u64,
 ) {
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled(
-            " q ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw("quit  "),
-        Span::styled(
-            " r ",
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(format!("refresh  auto {interval_secs}s  next {next_refresh_secs}s")),
-    ]))
-    .block(Block::default().borders(Borders::ALL));
+    let height = area.height;
+    let footer = if height <= 1 {
+        Paragraph::new(Line::from(vec![Span::raw(format!(
+            "q quit | r refresh | {interval_secs}s/{next_refresh_secs}s"
+        ))]))
+    } else {
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                " q ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("quit  "),
+            Span::styled(
+                " r ",
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(format!("refresh  auto {interval_secs}s  next {next_refresh_secs}s")),
+        ]))
+        .block(Block::default().borders(Borders::ALL))
+    };
     frame.render_widget(footer, area);
 }
 
