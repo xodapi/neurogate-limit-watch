@@ -1,9 +1,13 @@
-use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
-use crossterm::execute;
-use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, Gauge, Paragraph, Sparkline};
+use ratatui::Terminal;
 use serde_json::Value;
-use std::io::{self, Write};
+use std::collections::{HashMap, VecDeque};
+use std::io;
 use std::time::{Duration, Instant};
 
 use neurogate_limit_watch::{self as ng, VERSION};
@@ -11,6 +15,9 @@ use neurogate_limit_watch::{self as ng, VERSION};
 use super::args::Args;
 use super::notify::Notifier;
 
+const SPARKLINE_LEN: usize = 20;
+
+#[allow(dead_code)]
 pub struct StatusSnapshot {
     pub windows: Vec<ng::WindowState>,
     pub abtop: Option<Value>,
@@ -48,12 +55,23 @@ pub fn collect_status(
 pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> {
     let interval_secs = monitor_interval(args);
     let interval = Duration::from_secs(interval_secs);
-    let _terminal = TerminalGuard::enter()?;
+
+    crossterm::terminal::enable_raw_mode()
+        .map_err(|error| format!("cannot enable terminal raw mode: {error}"))?;
+    let mut stdout = io::stdout();
+    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)
+        .map_err(|error| format!("cannot enter alternate screen: {error}"))?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal =
+        Terminal::new(backend).map_err(|error| format!("cannot initialize terminal: {error}"))?;
+
+    let _guard = TerminalGuard;
+
     let mut last_snapshot = None::<StatusSnapshot>;
     let mut last_error = None::<String>;
     let mut force_refresh = true;
     let mut next_refresh = Instant::now();
-    let mut frame = MonitorFrame::default();
+    let mut window_history: HashMap<&str, WindowHistory> = HashMap::new();
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
 
     loop {
@@ -63,6 +81,14 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                 .and_then(|config| collect_status(args, &config, &http))
             {
                 Ok(snapshot) => {
+                    for window in &snapshot.windows {
+                        let hist = window_history
+                            .entry(window.key)
+                            .or_insert_with(WindowHistory::new);
+                        let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
+                            .unwrap_or(0.0);
+                        hist.record(peak);
+                    }
                     notifier.check_windows(&snapshot.windows);
                     last_snapshot = Some(snapshot);
                     last_error = None;
@@ -78,14 +104,21 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
         let next_refresh_secs = next_refresh
             .saturating_duration_since(Instant::now())
             .as_secs();
-        frame.draw(
-            last_snapshot.as_ref(),
-            last_error.as_deref(),
-            interval_secs,
-            next_refresh_secs,
-            args.with_abtop,
-            args.warning_threshold,
-        )?;
+
+        terminal
+            .draw(|frame| {
+                draw_frame(
+                    frame,
+                    last_snapshot.as_ref(),
+                    last_error.as_deref(),
+                    interval_secs,
+                    next_refresh_secs,
+                    args.with_abtop,
+                    args.warning_threshold,
+                    &window_history,
+                );
+            })
+            .map_err(|error| format!("cannot draw terminal frame: {error}"))?;
 
         if event::poll(Duration::from_millis(200))
             .map_err(|error| format!("cannot read terminal events: {error}"))?
@@ -99,10 +132,301 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                     KeyCode::Char('r') => force_refresh = true,
                     _ => {}
                 },
+                Event::Resize(_, _) => {}
                 _ => {}
             }
         }
     }
+}
+
+fn draw_frame(
+    frame: &mut ratatui::Frame,
+    snapshot: Option<&StatusSnapshot>,
+    error: Option<&str>,
+    interval_secs: u64,
+    next_refresh_secs: u64,
+    with_abtop: bool,
+    warning_threshold: f64,
+    window_history: &HashMap<&str, WindowHistory>,
+) {
+    let area = frame.area();
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(10),
+            Constraint::Length(3),
+        ])
+        .split(area);
+
+    draw_header(frame, chunks[0], snapshot);
+    draw_body(
+        frame,
+        chunks[1],
+        snapshot,
+        error,
+        with_abtop,
+        warning_threshold,
+        window_history,
+    );
+    draw_footer(frame, chunks[2], interval_secs, next_refresh_secs);
+}
+
+fn draw_header(frame: &mut ratatui::Frame, area: Rect, snapshot: Option<&StatusSnapshot>) {
+    let (title, style) = match snapshot {
+        Some(s) => {
+            let level = ng::worst_level(&s.windows);
+            let peak = ng::peak_percent_all(&s.windows)
+                .map(|v| format!("{v:.0}%"))
+                .unwrap_or_else(|| "n/a".into());
+            let (color, label) = if level == "danger" {
+                (Color::Red, "DANGER")
+            } else if level == "warning" {
+                (Color::Yellow, "WARNING")
+            } else {
+                (Color::Green, "OK")
+            };
+            (
+                format!(" NeuroGate v{VERSION} | {label} | peak {peak} "),
+                Style::default().fg(color),
+            )
+        }
+        None => (
+            format!(" NeuroGate v{VERSION} | waiting for data... "),
+            Style::default().fg(Color::DarkGray),
+        ),
+    };
+
+    let header = Paragraph::new(Line::from(Span::styled(title, style)))
+        .block(Block::default().borders(Borders::ALL).border_style(style));
+    frame.render_widget(header, area);
+}
+
+fn draw_body(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    snapshot: Option<&StatusSnapshot>,
+    error: Option<&str>,
+    _with_abtop: bool,
+    warning_threshold: f64,
+    window_history: &HashMap<&str, WindowHistory>,
+) {
+    let body_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(6), Constraint::Length(5)])
+        .split(area);
+
+    let windows_area = body_chunks[0];
+    let alerts_area = body_chunks[1];
+
+    if let Some(snapshot) = snapshot {
+        let cols = 2u16;
+        let rows = ((snapshot.windows.len() as u16 + cols - 1) / cols).max(1);
+        let mut row_constraints = Vec::new();
+        for _ in 0..rows {
+            row_constraints.push(Constraint::Percentage(100 / rows));
+        }
+
+        let grid = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(row_constraints)
+            .split(windows_area);
+
+        for (i, window) in snapshot.windows.iter().enumerate() {
+            let row = (i as u16) / cols;
+            let col = (i as u16) % cols;
+            let col_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50); 2])
+                .split(grid[row as usize]);
+            draw_window_card(
+                frame,
+                col_chunks[col as usize],
+                window,
+                window_history.get(window.key),
+                warning_threshold,
+            );
+        }
+    } else {
+        let waiting = Paragraph::new("Collecting NeuroGate status...")
+            .block(Block::default().title("Limits").borders(Borders::ALL));
+        frame.render_widget(waiting, windows_area);
+    }
+
+    draw_alerts(frame, alerts_area, snapshot, warning_threshold);
+
+    if let Some(error) = error {
+        let error_area = Rect {
+            y: area.y + area.height.saturating_sub(1),
+            height: 1,
+            ..area
+        };
+        let err_widget = Paragraph::new(Span::styled(
+            format!(" ! {error}"),
+            Style::default().fg(Color::Red),
+        ));
+        frame.render_widget(err_widget, error_area);
+    }
+}
+
+fn draw_window_card(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    window: &ng::WindowState,
+    history: Option<&WindowHistory>,
+    _warning_threshold: f64,
+) {
+    let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
+        .unwrap_or(0.0);
+
+    let (border_color, title_style) = match window.level.as_str() {
+        "danger" => (
+            Color::Red,
+            Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD),
+        ),
+        "warning" => (
+            Color::Yellow,
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        _ => (Color::Green, Style::default().fg(Color::Green)),
+    };
+
+    let reset_text = ng::format_duration_opt(window.reset_in_seconds);
+    let title = format!(" {} | {} | reset {} ", window.key, window.level, reset_text);
+
+    let inner = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Length(2),
+            Constraint::Min(2),
+        ])
+        .margin(1)
+        .split(area);
+
+    let gauge = Gauge::default()
+        .block(
+            Block::default()
+                .title(title)
+                .title_style(title_style)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(border_color)),
+        )
+        .gauge_style(Style::default().fg(border_color))
+        .ratio((peak / 100.0) as f64);
+    frame.render_widget(gauge, inner[0]);
+
+    let credit_line = match &window.credits {
+        Some(m) => Line::from(vec![
+            Span::styled("cr ", Style::default().fg(Color::DarkGray)),
+            Span::raw(format!(
+                "{}/{} ({:.0}%)",
+                ng::short_number(m.used),
+                ng::short_number(m.limit),
+                m.percent
+            )),
+        ]),
+        None => Line::from(Span::styled("cr n/a", Style::default().fg(Color::DarkGray))),
+    };
+    let request_line = match &window.requests {
+        Some(m) => Line::from(vec![
+            Span::styled("rq ", Style::default().fg(Color::DarkGray)),
+            Span::raw(format!(
+                "{}/{} ({:.0}%)",
+                ng::short_number(m.used),
+                ng::short_number(m.limit),
+                m.percent
+            )),
+        ]),
+        None => Line::from(Span::styled("rq n/a", Style::default().fg(Color::DarkGray))),
+    };
+    let metrics = Paragraph::new(vec![credit_line, request_line]);
+    frame.render_widget(metrics, inner[1]);
+
+    if let Some(hist) = history {
+        let values = hist.sparkline_values();
+        if !values.is_empty() {
+            let spark = Sparkline::default()
+                .block(Block::default().title("history"))
+                .data(&values)
+                .style(Style::default().fg(border_color));
+            frame.render_widget(spark, inner[2]);
+        }
+    }
+}
+
+fn draw_alerts(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    snapshot: Option<&StatusSnapshot>,
+    warning_threshold: f64,
+) {
+    let alerts = match snapshot {
+        Some(s) => monitor_alerts(&s.windows, warning_threshold),
+        None => vec!["waiting for data".into()],
+    };
+
+    let block = Block::default()
+        .title(" alerts ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray));
+
+    if alerts.is_empty() {
+        let ok = Paragraph::new(Span::styled(
+            "all windows below threshold",
+            Style::default().fg(Color::Green),
+        ))
+        .block(block);
+        frame.render_widget(ok, area);
+    } else {
+        let lines: Vec<Line> = alerts
+            .iter()
+            .map(|alert| {
+                let style = if alert.starts_with("danger") {
+                    Style::default().fg(Color::Red)
+                } else if alert.starts_with("warning") {
+                    Style::default().fg(Color::Yellow)
+                } else {
+                    Style::default()
+                };
+                Line::from(Span::styled(alert.clone(), style))
+            })
+            .collect();
+        let widget = Paragraph::new(lines).block(block);
+        frame.render_widget(widget, area);
+    }
+}
+
+fn draw_footer(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    interval_secs: u64,
+    next_refresh_secs: u64,
+) {
+    let footer = Paragraph::new(Line::from(vec![
+        Span::styled(
+            " q ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw("quit  "),
+        Span::styled(
+            " r ",
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!("refresh  auto {interval_secs}s  next {next_refresh_secs}s")),
+    ]))
+    .block(Block::default().borders(Borders::ALL));
+    frame.render_widget(footer, area);
 }
 
 fn load_config(args: &Args) -> Result<ng::RuntimeConfig, String> {
@@ -123,86 +447,37 @@ fn monitor_interval(args: &Args) -> u64 {
 
 struct TerminalGuard;
 
-impl TerminalGuard {
-    fn enter() -> Result<Self, String> {
-        terminal::enable_raw_mode()
-            .map_err(|error| format!("cannot enable terminal raw mode: {error}"))?;
-        let mut stdout = io::stdout();
-        if let Err(error) = execute!(stdout, EnterAlternateScreen, Hide, Clear(ClearType::All)) {
-            let _ = terminal::disable_raw_mode();
-            return Err(format!("cannot initialize terminal dashboard: {error}"));
-        }
-        Ok(Self)
-    }
-}
-
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
-        let _ = terminal::disable_raw_mode();
-        let _ = execute!(io::stdout(), Show, LeaveAlternateScreen);
+        let _ = crossterm::terminal::disable_raw_mode();
+        let _ = crossterm::execute!(io::stdout(), crossterm::terminal::LeaveAlternateScreen);
     }
 }
 
-#[derive(Default)]
-struct MonitorFrame {
-    lines: Vec<String>,
-    size: Option<(u16, u16)>,
+struct WindowHistory {
+    values: VecDeque<f64>,
 }
 
-impl MonitorFrame {
-    fn draw(
-        &mut self,
-        snapshot: Option<&StatusSnapshot>,
-        error: Option<&str>,
-        interval_secs: u64,
-        next_refresh_secs: u64,
-        with_abtop: bool,
-        warning_threshold: f64,
-    ) -> Result<(), String> {
-        let (width, height) = terminal::size().unwrap_or((100, 30));
-        let mut stdout = io::stdout();
-        if self.size != Some((width, height)) {
-            execute!(stdout, MoveTo(0, 0), Clear(ClearType::All))
-                .map_err(|error| format!("cannot resize monitor frame: {error}"))?;
-            self.lines.clear();
-            self.size = Some((width, height));
+impl WindowHistory {
+    fn new() -> Self {
+        Self {
+            values: VecDeque::with_capacity(SPARKLINE_LEN),
         }
+    }
 
-        let next = render_monitor_lines(
-            snapshot,
-            error,
-            width,
-            height,
-            interval_secs,
-            next_refresh_secs,
-            with_abtop,
-            warning_threshold,
-        );
-        if next == self.lines {
-            return Ok(());
+    fn record(&mut self, peak: f64) {
+        if self.values.len() >= SPARKLINE_LEN {
+            self.values.pop_front();
         }
+        self.values.push_back(peak);
+    }
 
-        let max_lines = next.len().max(self.lines.len());
-        for index in 0..max_lines {
-            if next.get(index) == self.lines.get(index) {
-                continue;
-            }
-            let row = index as u16;
-            execute!(stdout, MoveTo(0, row), Clear(ClearType::CurrentLine))
-                .map_err(|error| format!("cannot redraw monitor line: {error}"))?;
-            if let Some(line) = next.get(index) {
-                stdout
-                    .write_all(line.as_bytes())
-                    .map_err(|error| format!("cannot write monitor output: {error}"))?;
-            }
-        }
-        stdout
-            .flush()
-            .map_err(|error| format!("cannot flush monitor output: {error}"))?;
-        self.lines = next;
-        Ok(())
+    fn sparkline_values(&self) -> Vec<u64> {
+        self.values.iter().map(|v| *v as u64).collect()
     }
 }
+
+// ── plain-text rendering (used by tests and --once mode) ──────────────
 
 #[cfg(test)]
 pub fn render_monitor(
@@ -228,6 +503,7 @@ pub fn render_monitor(
     .join("\r\n")
 }
 
+#[cfg(test)]
 pub fn render_monitor_lines(
     snapshot: Option<&StatusSnapshot>,
     error: Option<&str>,
@@ -402,6 +678,7 @@ pub fn render_monitor_lines(
         .collect::<Vec<_>>()
 }
 
+#[cfg(test)]
 pub fn panel_top(title: &str, width: usize) -> String {
     let label = format!(" {title} ");
     let inner = width.saturating_sub(2);
@@ -412,10 +689,12 @@ pub fn panel_top(title: &str, width: usize) -> String {
     )
 }
 
+#[cfg(test)]
 pub fn panel_bottom(width: usize) -> String {
     format!("+{}+", "-".repeat(width.saturating_sub(2)))
 }
 
+#[cfg(test)]
 pub fn panel_line(text: &str, width: usize) -> String {
     let inner = width.saturating_sub(4);
     let fitted = fit_text(text, inner);
@@ -423,6 +702,7 @@ pub fn panel_line(text: &str, width: usize) -> String {
     format!("| {}{} |", fitted, " ".repeat(padding))
 }
 
+#[cfg(test)]
 pub fn fit_text(text: &str, width: usize) -> String {
     let mut chars = text.chars();
     let mut out = String::new();
@@ -439,6 +719,7 @@ pub fn fit_text(text: &str, width: usize) -> String {
     out
 }
 
+#[cfg(test)]
 fn bar_width(width: usize) -> usize {
     if width >= 120 {
         28
@@ -449,6 +730,7 @@ fn bar_width(width: usize) -> usize {
     }
 }
 
+#[cfg(test)]
 pub fn hbar(percent: f64, width: usize) -> String {
     let percent = percent.clamp(0.0, 100.0);
     let filled = ((percent / 100.0) * width as f64).round() as usize;
@@ -459,6 +741,7 @@ pub fn hbar(percent: f64, width: usize) -> String {
     )
 }
 
+#[cfg(test)]
 fn monitor_metric(label: &str, metric: Option<&ng::Metric>) -> String {
     match metric {
         Some(metric) => format!(
@@ -499,6 +782,7 @@ fn monitor_alerts(windows: &[ng::WindowState], warning_threshold: f64) -> Vec<St
     alerts
 }
 
+#[cfg(test)]
 fn monitor_agent(agent: &Value) -> String {
     let agent_cli = agent
         .get("agent_cli")
@@ -529,6 +813,7 @@ fn monitor_agent(agent: &Value) -> String {
     )
 }
 
+#[cfg(test)]
 fn abtop_agent_summary(abtop: Option<&Value>) -> String {
     let Some(abtop) = abtop else {
         return "agents:n/a".to_string();
@@ -613,5 +898,20 @@ mod tests {
 
         let bottom = panel_bottom(20);
         assert_eq!(bottom.len(), 20);
+    }
+
+    #[test]
+    fn window_history_sparkline() {
+        let mut hist = WindowHistory::new();
+        assert!(hist.sparkline_values().is_empty());
+
+        hist.record(50.0);
+        hist.record(75.0);
+        assert_eq!(hist.sparkline_values(), vec![50, 75]);
+
+        for i in 0..25 {
+            hist.record(i as f64);
+        }
+        assert_eq!(hist.sparkline_values().len(), SPARKLINE_LEN);
     }
 }
