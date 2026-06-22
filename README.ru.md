@@ -158,6 +158,7 @@ Watch mode:
 
 ```bash
 nglimit --watch 60 --with-abtop
+nglimit --watch 60 --notify
 ```
 
 Live-monitor:
@@ -166,12 +167,27 @@ Live-monitor:
 nglimit --monitor
 nglimit --monitor --watch 10
 nglimit --monitor --with-abtop
+nglimit --monitor --notify
 ```
 
 В monitor-режиме нажмите `r`, чтобы обновить данные сразу, и `q` или `Esc`,
 чтобы выйти. Экран похож на `abtop`: quota-окна NeuroGate, warning/danger
 alerts, reset timers, остаток credits/requests и опционально локальный контекст
 Codex/Claude-агентов из `abtop --status-json`.
+
+Desktop-уведомления:
+
+```bash
+nglimit --notify
+nglimit --watch 60 --notify
+nglimit --monitor --notify
+```
+
+`--notify` показывает локальное desktop-уведомление, когда окно лимита
+переходит в `warning` или `danger`. Внутри процесса хранится последний уровень
+по каждому окну, поэтому `--watch` и `--monitor` не спамят одним и тем же
+уведомлением на каждом refresh. Снижение уровня после сброса окна происходит
+тихо.
 
 Порог для CI/автоматизаций:
 
@@ -225,7 +241,10 @@ JSON:
   payload без локальных путей, промптов, текста чатов и session ID.
 - `--monitor` использует те же безопасные сводки и не выводит API-ключ в
   терминал.
-- Нет телеметрии и внешних запросов, кроме NeuroGate `/v1/me`.
+- `--notify` передает только краткую сводку лимита локальному helper-у ОС:
+  Windows PowerShell toast/fallback popup, macOS `osascript` или Linux/BSD
+  `notify-send`.
+- Нет телеметрии и внешних сетевых запросов, кроме NeuroGate `/v1/me`.
 
 ## Настройка
 

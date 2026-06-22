@@ -7,7 +7,7 @@ https://github.com/xodapi/neurogate-limit-watch/discussions
 
 ## High Impact / Самое полезное
 
-- `--notify`: local desktop notification when a window reaches warning/danger.
+- Improve `--notify` with optional reset/recovery notices and Termux:API support.
 - Per-window thresholds like `5h=80,7d=90`.
 - Monitor presets/layouts for very narrow Droid/Termux terminals.
 - More compact presets for Droid widgets, tmux, and CI logs.

@@ -160,6 +160,7 @@ Watch mode:
 
 ```bash
 nglimit --watch 60 --with-abtop
+nglimit --watch 60 --notify
 ```
 
 Live monitor:
@@ -168,12 +169,26 @@ Live monitor:
 nglimit --monitor
 nglimit --monitor --watch 10
 nglimit --monitor --with-abtop
+nglimit --monitor --notify
 ```
 
 In monitor mode, press `r` to refresh immediately and `q` or `Esc` to quit.
 It renders an abtop-style dashboard with NeuroGate quota windows, warning
 alerts, reset timers, remaining credits/requests, and optional local
 Codex/Claude agent context from `abtop --status-json`.
+
+Desktop notifications:
+
+```bash
+nglimit --notify
+nglimit --watch 60 --notify
+nglimit --monitor --notify
+```
+
+`--notify` sends a local desktop alert when a quota window escalates into
+`warning` or `danger`. It keeps one in-process state map, so polling and
+monitor loops do not spam the same alert on every refresh. De-escalation after a
+window reset is silent.
 
 CI/automation threshold:
 
@@ -228,7 +243,10 @@ JSON output:
   session IDs.
 - `--monitor` uses the same privacy-safe summaries and keeps the API key out of
   the terminal output.
-- No telemetry, no external calls except NeuroGate `/v1/me`.
+- `--notify` only passes quota summary text to a local OS notification helper:
+  Windows PowerShell toast/fallback popup, macOS `osascript`, or Linux/BSD
+  `notify-send`.
+- No telemetry, no external network calls except NeuroGate `/v1/me`.
 
 ## Configuration
 

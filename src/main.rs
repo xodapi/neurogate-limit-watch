@@ -48,6 +48,7 @@ struct Args {
     output: OutputMode,
     monitor: bool,
     with_abtop: bool,
+    notify: bool,
     watch: u64,
     fail_on: FailOn,
     warning_threshold: f64,
@@ -135,14 +136,15 @@ fn real_main() -> Result<i32, String> {
         println!("nglimit {VERSION}");
         return Ok(0);
     }
+    let mut notifier = Notifier::new(args.notify);
     if args.monitor {
-        return run_monitor(&args);
+        return run_monitor(&args, &mut notifier);
     }
 
     loop {
         let dotenv = load_dotenv_for_args(&args)?;
         let config = runtime_config(&args, &dotenv);
-        let code = run_once(&args, &config)?;
+        let code = run_once(&args, &config, &mut notifier)?;
         if args.watch == 0 {
             return Ok(code);
         }
@@ -166,6 +168,7 @@ where
         output: OutputMode::Human,
         monitor: false,
         with_abtop: false,
+        notify: false,
         watch: 0,
         fail_on: FailOn::Never,
         warning_threshold: 75.0,
@@ -184,6 +187,7 @@ where
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
             "--monitor" => parsed.monitor = true,
             "--with-abtop" => parsed.with_abtop = true,
+            "--notify" => parsed.notify = true,
             "--api-base" => parsed.api_base = Some(next_value(&mut iter, "--api-base")?),
             "--api-key-env" => parsed.api_key_env = next_value(&mut iter, "--api-key-env")?,
             "--env-file" => {
@@ -275,6 +279,7 @@ OPTIONS:
       --compact              Print one-line output for widgets/status bars
       --monitor              Full-screen live dashboard, abtop-style
       --with-abtop           Merge local abtop --status-json output if available
+      --notify               Desktop alert when a window enters warning/danger
       --watch <SECONDS>      Poll every N seconds; default is 5 in --monitor
       --fail-on <LEVEL>      Exit non-zero on threshold: never, warning, danger
       --warning <PCT>        Warning threshold percentage [default: 75]
@@ -293,7 +298,7 @@ OPTIONS:
     );
 }
 
-fn run_once(args: &Args, config: &RuntimeConfig) -> Result<i32, String> {
+fn run_once(args: &Args, config: &RuntimeConfig, notifier: &mut Notifier) -> Result<i32, String> {
     let snapshot = collect_status(args, config)?;
     let status = summary_to_json(&snapshot.windows, snapshot.abtop.as_ref());
 
@@ -308,6 +313,8 @@ fn run_once(args: &Args, config: &RuntimeConfig) -> Result<i32, String> {
         OutputMode::Compact => print_compact(&snapshot.windows, snapshot.abtop.as_ref()),
         OutputMode::Human => print_human(&snapshot.windows, snapshot.abtop.as_ref()),
     }
+
+    notifier.check_windows(&snapshot.windows);
 
     Ok(exit_code(&snapshot.windows, args.fail_on))
 }
@@ -335,7 +342,7 @@ fn collect_status(args: &Args, config: &RuntimeConfig) -> Result<StatusSnapshot,
     })
 }
 
-fn run_monitor(args: &Args) -> Result<i32, String> {
+fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> {
     let interval_secs = monitor_interval(args);
     let interval = Duration::from_secs(interval_secs);
     let _terminal = TerminalGuard::enter()?;
@@ -353,6 +360,7 @@ fn run_monitor(args: &Args) -> Result<i32, String> {
                 .and_then(|config| collect_status(args, &config))
             {
                 Ok(snapshot) => {
+                    notifier.check_windows(&snapshot.windows);
                     last_snapshot = Some(snapshot);
                     last_error = None;
                 }
@@ -732,6 +740,229 @@ fn hbar(percent: f64, width: usize) -> String {
         "#".repeat(filled.min(width)),
         "-".repeat(width.saturating_sub(filled))
     )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AlertLevel {
+    Ok,
+    Warning,
+    Danger,
+}
+
+impl AlertLevel {
+    fn from_summary(level: &str) -> Self {
+        match level {
+            "danger" => Self::Danger,
+            "warning" => Self::Warning,
+            _ => Self::Ok,
+        }
+    }
+
+    fn severity(self) -> u8 {
+        match self {
+            Self::Ok => 1,
+            Self::Warning => 2,
+            Self::Danger => 3,
+        }
+    }
+
+    fn is_escalation_from(self, previous: Self) -> bool {
+        self.severity() > previous.severity() && self != Self::Ok
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Warning => "warning",
+            Self::Danger => "danger",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NotificationMessage {
+    window: String,
+    level: AlertLevel,
+    title: String,
+    body: String,
+}
+
+#[derive(Debug)]
+struct Notifier {
+    enabled: bool,
+    last_levels: HashMap<String, AlertLevel>,
+    failure_reported: bool,
+}
+
+impl Notifier {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            last_levels: HashMap::new(),
+            failure_reported: false,
+        }
+    }
+
+    fn check_windows(&mut self, windows: &[WindowSummary]) {
+        if !self.enabled {
+            return;
+        }
+        for window in windows {
+            if let Some(message) = next_notification(&mut self.last_levels, window) {
+                if let Err(error) = fire_desktop_notification(&message) {
+                    if !self.failure_reported {
+                        eprintln!("nglimit: notification failed (non-fatal): {error}");
+                        self.failure_reported = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn next_notification(
+    last_levels: &mut HashMap<String, AlertLevel>,
+    window: &WindowSummary,
+) -> Option<NotificationMessage> {
+    let level = AlertLevel::from_summary(window.level);
+    let previous = last_levels
+        .get(window.key)
+        .copied()
+        .unwrap_or(AlertLevel::Ok);
+    last_levels.insert(window.key.to_string(), level);
+
+    if !level.is_escalation_from(previous) {
+        return None;
+    }
+
+    let title = match level {
+        AlertLevel::Danger => format!("NeuroGate: {} window critical", window.key),
+        AlertLevel::Warning => format!("NeuroGate: {} window high usage", window.key),
+        AlertLevel::Ok => return None,
+    };
+    Some(NotificationMessage {
+        window: window.key.to_string(),
+        level,
+        title,
+        body: notification_body(window),
+    })
+}
+
+fn notification_body(window: &WindowSummary) -> String {
+    let peak = peak_percent(window)
+        .map(|value| format!("{value:.1}%"))
+        .unwrap_or_else(|| "n/a".to_string());
+    let credits = notification_metric("credits", window.credits.as_ref());
+    let requests = notification_metric("requests", window.requests.as_ref());
+    let reset = format_duration(window.reset_in_seconds);
+    format!(
+        "{} | peak {peak} | {credits} | {requests} | reset {reset}",
+        window.level
+    )
+}
+
+fn notification_metric(label: &str, metric: Option<&MetricSummary>) -> String {
+    match metric {
+        Some(metric) => format!(
+            "{label} {:.1}% left {}",
+            metric.percent,
+            short_number(metric.remaining)
+        ),
+        None => format!("{label} n/a"),
+    }
+}
+
+#[cfg(windows)]
+fn fire_desktop_notification(message: &NotificationMessage) -> Result<(), String> {
+    let title = powershell_quote(&message.title);
+    let body = powershell_quote(&message.body);
+    let script = format!(
+        r#"
+$title = '{title}'
+$body = '{body}'
+try {{
+  [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+  [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+  $xmlTitle = [System.Security.SecurityElement]::Escape($title)
+  $xmlBody = [System.Security.SecurityElement]::Escape($body)
+  $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+  $xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>$xmlTitle</text><text>$xmlBody</text></binding></visual></toast>")
+  $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("nglimit").Show($toast)
+}} catch {{
+  try {{
+    $icon = if ('{level}' -eq 'danger') {{ 48 }} else {{ 64 }}
+    (New-Object -ComObject WScript.Shell).Popup($body, 8, $title, $icon) | Out-Null
+  }} catch {{}}
+}}
+"#,
+        level = message.level.label()
+    );
+    Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("cannot start PowerShell notification helper: {error}"))
+}
+
+#[cfg(windows)]
+fn powershell_quote(text: &str) -> String {
+    text.replace('\'', "''")
+        .replace('\r', " ")
+        .replace('\n', " ")
+}
+
+#[cfg(target_os = "macos")]
+fn fire_desktop_notification(message: &NotificationMessage) -> Result<(), String> {
+    let script = format!(
+        "display notification {} with title {}",
+        applescript_quote(&message.body),
+        applescript_quote(&message.title)
+    );
+    Command::new("osascript")
+        .args(["-e", &script])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("cannot start osascript notification helper: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn applescript_quote(text: &str) -> String {
+    format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn fire_desktop_notification(message: &NotificationMessage) -> Result<(), String> {
+    let urgency = match message.level {
+        AlertLevel::Danger => "critical",
+        AlertLevel::Warning => "normal",
+        AlertLevel::Ok => "low",
+    };
+    Command::new("notify-send")
+        .args([
+            "-a",
+            "nglimit",
+            "-u",
+            urgency,
+            &message.title,
+            &message.body,
+        ])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("cannot start notify-send: {error}"))
+}
+
+#[cfg(not(any(windows, unix)))]
+fn fire_desktop_notification(_message: &NotificationMessage) -> Result<(), String> {
+    Err("desktop notifications are not supported on this platform".to_string())
 }
 
 fn monitor_metric(label: &str, metric: Option<&MetricSummary>) -> String {
@@ -1555,5 +1786,57 @@ mod tests {
         let error = parse_args(["--monitor".to_string(), "--json".to_string()]).unwrap_err();
 
         assert!(error.contains("--monitor cannot be combined"));
+    }
+
+    #[test]
+    fn notify_flag_is_parsed() {
+        let args = parse_args([
+            "--notify".to_string(),
+            "--watch".to_string(),
+            "60".to_string(),
+        ])
+        .unwrap();
+
+        assert!(args.notify);
+        assert_eq!(args.watch, 60);
+    }
+
+    #[test]
+    fn notifications_only_fire_on_escalation() {
+        let mut last_levels = HashMap::new();
+        let warning = test_window("5h", "warning", 78.0);
+        let danger = test_window("5h", "danger", 96.0);
+        let ok = test_window("5h", "ok", 12.0);
+
+        assert_eq!(
+            next_notification(&mut last_levels, &warning).unwrap().level,
+            AlertLevel::Warning
+        );
+        assert!(next_notification(&mut last_levels, &warning).is_none());
+        assert_eq!(
+            next_notification(&mut last_levels, &danger).unwrap().level,
+            AlertLevel::Danger
+        );
+        assert!(next_notification(&mut last_levels, &ok).is_none());
+        assert_eq!(
+            next_notification(&mut last_levels, &warning).unwrap().level,
+            AlertLevel::Warning
+        );
+    }
+
+    fn test_window(key: &'static str, level: &'static str, percent: f64) -> WindowSummary {
+        WindowSummary {
+            key,
+            credits: Some(MetricSummary {
+                used: percent,
+                limit: 100.0,
+                remaining: 100.0 - percent,
+                percent,
+            }),
+            requests: None,
+            reset_at: None,
+            reset_in_seconds: Some(3600),
+            level,
+        }
     }
 }
