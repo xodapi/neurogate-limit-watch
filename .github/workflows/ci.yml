@@ -4,9 +4,12 @@ on:
   push:
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  test:
-    name: ${{ matrix.os }}
+  check:
+    name: Check ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -19,8 +22,14 @@ jobs:
         run: |
           rustc --version
           cargo --version
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Format check
+        run: cargo fmt --check
       - name: Test
         run: cargo test --locked
+      - name: Test GUI feature
+        run: cargo check --features gui --locked
       - name: Run demo CLI
         run: cargo run --locked -- --demo --json
       - name: Run fixture CLI

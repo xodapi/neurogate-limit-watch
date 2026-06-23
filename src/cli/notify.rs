@@ -164,9 +164,7 @@ try {{
 
 #[cfg(windows)]
 fn powershell_quote(text: &str) -> String {
-    text.replace('\'', "''")
-        .replace('\r', " ")
-        .replace('\n', " ")
+    text.replace('\'', "''").replace(['\r', '\n'], " ")
 }
 
 #[cfg(target_os = "macos")]
@@ -243,23 +241,17 @@ mod tests {
         let ok = test_window("5h", "ok", 12.0);
 
         assert_eq!(
-            next_notification(&mut last_levels, &warning)
-                .unwrap()
-                .level,
+            next_notification(&mut last_levels, &warning).unwrap().level,
             AlertLevel::Warning
         );
         assert!(next_notification(&mut last_levels, &warning).is_none());
         assert_eq!(
-            next_notification(&mut last_levels, &danger)
-                .unwrap()
-                .level,
+            next_notification(&mut last_levels, &danger).unwrap().level,
             AlertLevel::Danger
         );
         assert!(next_notification(&mut last_levels, &ok).is_none());
         assert_eq!(
-            next_notification(&mut last_levels, &warning)
-                .unwrap()
-                .level,
+            next_notification(&mut last_levels, &warning).unwrap().level,
             AlertLevel::Warning
         );
     }

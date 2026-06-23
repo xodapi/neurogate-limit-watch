@@ -28,7 +28,13 @@ fn main() {
     let weak = app.as_weak();
     let http_clone = http.clone();
     app.on_settings_changed(move |warning, danger| {
-        start_refresh(weak.clone(), false, http_clone.clone(), warning as f64, danger as f64);
+        start_refresh(
+            weak.clone(),
+            false,
+            http_clone.clone(),
+            warning as f64,
+            danger as f64,
+        );
     });
 
     let timer = Timer::default();
@@ -109,10 +115,10 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let requests: SharedString = ng::metric_text("запросы", window.requests.as_ref()).into();
     let percent_text: SharedString = format!("{} пик", ng::format_percent(window.percent)).into();
     let percent = window.percent as f32;
-    let credit_percent = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
-        .unwrap_or(0.0) as f32;
-    let request_percent = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
-        .unwrap_or(0.0) as f32;
+    let credit_percent =
+        ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
+    let request_percent =
+        ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
 
     match key {
         "5h" => {
@@ -206,7 +212,6 @@ fn runtime_config(dotenv: &HashMap<String, String>) -> ng::RuntimeConfig {
         api_base: ng::config_value("NEUROGATE_API_BASE", dotenv)
             .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
         api_key: ng::config_value("NEUROGATE_API_KEY", dotenv).unwrap_or_default(),
-        abtop_bin: ng::config_value("ABTOP_BIN", dotenv)
-            .unwrap_or_else(|| "abtop".to_string()),
+        abtop_bin: ng::config_value("ABTOP_BIN", dotenv).unwrap_or_else(|| "abtop".to_string()),
     }
 }

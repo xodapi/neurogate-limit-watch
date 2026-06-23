@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use neurogate_limit_watch::{self as ng, VERSION};
 
-use cli::args::{FailOn, parse_args};
+use cli::args::{parse_args, FailOn};
 use cli::monitor::run_monitor;
 use cli::notify::Notifier;
 use cli::output::run_once;

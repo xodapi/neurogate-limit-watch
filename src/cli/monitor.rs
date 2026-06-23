@@ -37,8 +37,12 @@ pub fn collect_status(
         http.fetch_me(&config.api_key, &config.api_base)?
     };
 
-    let windows =
-        ng::summarize_me_with_thresholds(&payload, args.warning_threshold, args.danger_threshold, &args.window_thresholds);
+    let windows = ng::summarize_me_with_thresholds(
+        &payload,
+        args.warning_threshold,
+        args.danger_threshold,
+        &args.window_thresholds,
+    );
     let abtop = if args.with_abtop {
         ng::read_abtop_status(&config.abtop_bin)
     } else {
@@ -77,16 +81,15 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
     loop {
         let now = Instant::now();
         if force_refresh || now >= next_refresh {
-            match load_config(args)
-                .and_then(|config| collect_status(args, &config, &http))
-            {
+            match load_config(args).and_then(|config| collect_status(args, &config, &http)) {
                 Ok(snapshot) => {
                     for window in &snapshot.windows {
                         let hist = window_history
                             .entry(window.key)
                             .or_insert_with(WindowHistory::new);
-                        let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
-                            .unwrap_or(0.0);
+                        let peak =
+                            ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
+                                .unwrap_or(0.0);
                         hist.record(peak);
                     }
                     notifier.check_windows(&snapshot.windows);
@@ -140,6 +143,7 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_frame(
     frame: &mut ratatui::Frame,
     snapshot: Option<&StatusSnapshot>,
@@ -210,6 +214,7 @@ fn draw_header(frame: &mut ratatui::Frame, area: Rect, snapshot: Option<&StatusS
     frame.render_widget(header, area);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_body(
     frame: &mut ratatui::Frame,
     area: Rect,
@@ -234,7 +239,7 @@ fn draw_body(
     let alerts_area = body_chunks[1];
 
     if let Some(snapshot) = snapshot {
-        let rows = ((snapshot.windows.len() as u16 + cols - 1) / cols).max(1);
+        let rows = (snapshot.windows.len() as u16).div_ceil(cols).max(1);
         let mut row_constraints = Vec::new();
         for _ in 0..rows {
             row_constraints.push(Constraint::Percentage(100 / rows));
@@ -296,15 +301,12 @@ fn draw_window_card(
     _warning_threshold: f64,
     preset: Preset,
 ) {
-    let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
-        .unwrap_or(0.0);
+    let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0);
 
     let (border_color, title_style) = match window.level.as_str() {
         "danger" => (
             Color::Red,
-            Style::default()
-                .fg(Color::Red)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
         "warning" => (
             Color::Yellow,
@@ -322,12 +324,11 @@ fn draw_window_card(
             let line = Line::from(vec![
                 Span::styled(
                     format!("{} ", window.key),
-                    Style::default().fg(border_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(border_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!("{:.0}%", peak),
-                    Style::default().fg(border_color),
-                ),
+                Span::styled(format!("{:.0}%", peak), Style::default().fg(border_color)),
                 Span::raw(format!(" reset {}", reset_text)),
             ]);
             let widget = Paragraph::new(line).block(
@@ -486,12 +487,7 @@ fn draw_alerts(
     }
 }
 
-fn draw_footer(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    interval_secs: u64,
-    next_refresh_secs: u64,
-) {
+fn draw_footer(frame: &mut ratatui::Frame, area: Rect, interval_secs: u64, next_refresh_secs: u64) {
     let height = area.height;
     let footer = if height <= 1 {
         Paragraph::new(Line::from(vec![Span::raw(format!(
@@ -514,7 +510,9 @@ fn draw_footer(
                     .bg(Color::DarkGray)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(format!("refresh  auto {interval_secs}s  next {next_refresh_secs}s")),
+            Span::raw(format!(
+                "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
+            )),
         ]))
         .block(Block::default().borders(Borders::ALL))
     };
@@ -572,6 +570,7 @@ impl WindowHistory {
 // ── plain-text rendering (used by tests and --once mode) ──────────────
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 pub fn render_monitor(
     snapshot: Option<&StatusSnapshot>,
     error: Option<&str>,
@@ -596,6 +595,7 @@ pub fn render_monitor(
 }
 
 #[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 pub fn render_monitor_lines(
     snapshot: Option<&StatusSnapshot>,
     error: Option<&str>,
@@ -621,9 +621,7 @@ pub fn render_monitor_lines(
                 "nglimit v{VERSION}  NeuroGate monitor  quota:{level} peak:{peak}  {agents}  {now}"
             )
         }
-        None => format!(
-            "nglimit v{VERSION}  NeuroGate monitor  waiting for first refresh  {now}"
-        ),
+        None => format!("nglimit v{VERSION}  NeuroGate monitor  waiting for first refresh  {now}"),
     };
     lines.push(fit_text(&title, width));
 
@@ -656,8 +654,7 @@ pub fn render_monitor_lines(
                 .map(|value| format!("{value:.1}%"))
                 .unwrap_or_else(|| "n/a".to_string());
             let bar = hbar(
-                ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
-                    .unwrap_or(0.0),
+                ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0),
                 bar_width(width),
             );
             lines.push(panel_line(
@@ -861,9 +858,10 @@ fn monitor_alerts(windows: &[ng::WindowState], warning_threshold: f64) -> Vec<St
                 && metric.percent >= warning_threshold
             {
                 alerts.push(format!(
-                    "{} {} at {:.1}%: {} left, reset {}",
+                    "{} {}/{} at {:.1}%: {} left, reset {}",
                     window.level,
-                    format!("{}/{}", window.key, label),
+                    window.key,
+                    label,
                     metric.percent,
                     ng::short_number(metric.remaining),
                     ng::format_duration_opt(window.reset_in_seconds)
@@ -898,8 +896,7 @@ fn monitor_agent(agent: &Value) -> String {
         .and_then(ng::to_number)
         .map(|value| format!("{value:.0}%"))
         .unwrap_or_else(|| "n/a".to_string());
-    let turns =
-        ng::value_string(agent.get("max_turn_count")).unwrap_or_else(|| "?".to_string());
+    let turns = ng::value_string(agent.get("max_turn_count")).unwrap_or_else(|| "?".to_string());
     format!(
         "{agent_cli:<8} {sessions:>8} {active:>6} {waiting:>7} {context:>7} {total_tokens:>12} {active_tokens:>13} {turns:>5}"
     )
@@ -910,10 +907,8 @@ fn abtop_agent_summary(abtop: Option<&Value>) -> String {
     let Some(abtop) = abtop else {
         return "agents:n/a".to_string();
     };
-    let sessions =
-        ng::value_string(abtop.get("sessions_total")).unwrap_or_else(|| "?".to_string());
-    let active =
-        ng::value_string(abtop.get("sessions_active")).unwrap_or_else(|| "?".to_string());
+    let sessions = ng::value_string(abtop.get("sessions_total")).unwrap_or_else(|| "?".to_string());
+    let active = ng::value_string(abtop.get("sessions_active")).unwrap_or_else(|| "?".to_string());
     let ctx = abtop
         .get("agents")
         .and_then(Value::as_array)

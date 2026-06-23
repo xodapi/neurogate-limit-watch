@@ -172,6 +172,24 @@ nglimit --monitor --with-abtop
 nglimit --monitor --notify
 ```
 
+Monitor presets for different terminal sizes:
+
+```bash
+nglimit --monitor --preset full      # 2-column grid, sparklines (default)
+nglimit --monitor --preset compact   # single-column, gauge + metrics
+nglimit --monitor --preset mini      # one line per window, minimal
+```
+
+Per-window thresholds:
+
+```bash
+nglimit --monitor --threshold 5h=80:95,7d=90
+nglimit --fail-on warning --threshold 24h=85:98
+```
+
+Format: `KEY=WARNING[:DANGER]` where KEY is one of `5h`, `24h`, `7d`, `30d`.
+Per-window thresholds override `--warning`/`--danger` for those windows.
+
 In monitor mode, press `r` to refresh immediately and `q` or `Esc` to quit.
 It renders an abtop-style dashboard with NeuroGate quota windows, warning
 alerts, reset timers, remaining credits/requests, and optional local
@@ -273,37 +291,34 @@ See [ROADMAP.md](ROADMAP.md) for the current improvement backlog.
 
 ## Supported OS
 
-- Windows
-- macOS
-- Linux
-- Android/Termux should work from source with Rust installed; prebuilt Termux
-  binaries are on the roadmap.
+- Windows (x86_64)
+- macOS (aarch64)
+- Linux (x86_64, aarch64)
+- Android/Termux — see [docs/termux.md](docs/termux.md)
 
 ## Tests
 
 ```bash
 cargo test --locked
+cargo clippy --all-targets -- -D warnings
+cargo fmt --check
 cargo run --locked -- --demo --json
 ```
 
-## Contest status
+## What works
 
-What works:
-
-- Native Rust CLI.
-- NeuroGate `/v1/me` polling.
+- Native Rust CLI and GUI (build with `--features gui`).
+- NeuroGate `/v1/me` polling with robust schema tolerance.
 - 5h / 24h / 7d / 30d credit and request windows.
-- Human output and JSON output.
-- Compact output for widgets/status bars.
-- Full-screen live monitor with `q`/`Esc` quit and `r` refresh.
+- Human, JSON, and compact output modes.
+- Full-screen ratatui monitor with gauges, sparklines, color coding.
+- Monitor presets: `full`, `compact`, `mini` for different terminal sizes.
+- Per-window thresholds: `--threshold 5h=80:95,7d=90`.
 - `.env` file next to the binary or working directory.
 - Custom warning/danger thresholds.
+- Desktop notifications with escalation tracking.
 - Demo/mock mode without a key.
 - Optional local abtop integration.
-- CI and release workflow for native binaries.
-
-Not ready yet:
-
-- Native Android UI.
-- Notifications/webhooks.
-- Per-key statistics, because public `/v1/*` endpoints expose aggregate usage.
+- CI and release workflow for native binaries (Windows, Linux, macOS, ARM).
+- PowerShell install/uninstall scripts.
+- Termux/Android install guide.

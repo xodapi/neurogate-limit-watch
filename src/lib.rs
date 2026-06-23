@@ -75,8 +75,7 @@ impl RuntimeConfig {
                 .or_else(|| config_value("NEUROGATE_API_BASE", &dotenv))
                 .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
             api_key: config_value(api_key_env, &dotenv).unwrap_or_default(),
-            abtop_bin: config_value("ABTOP_BIN", &dotenv)
-                .unwrap_or_else(|| "abtop".to_string()),
+            abtop_bin: config_value("ABTOP_BIN", &dotenv).unwrap_or_else(|| "abtop".to_string()),
         })
     }
 }
@@ -212,7 +211,12 @@ pub fn summarize_me(
     warning_threshold: f64,
     danger_threshold: f64,
 ) -> Vec<WindowState> {
-    summarize_me_with_thresholds(payload, warning_threshold, danger_threshold, &std::collections::HashMap::new())
+    summarize_me_with_thresholds(
+        payload,
+        warning_threshold,
+        danger_threshold,
+        &std::collections::HashMap::new(),
+    )
 }
 
 pub fn summarize_me_with_thresholds(
@@ -249,12 +253,7 @@ pub fn summarize_me_with_thresholds(
             .copied()
             .unwrap_or((warning_threshold, danger_threshold));
 
-        let level = window_level(
-            credits.as_ref(),
-            requests.as_ref(),
-            w,
-            d,
-        );
+        let level = window_level(credits.as_ref(), requests.as_ref(), w, d);
 
         summaries.push(WindowState {
             key,
@@ -744,9 +743,7 @@ pub fn read_agent_status(binary: &str) -> AgentStatus {
         .or_else(|| summed_agent_token_rate(&parsed));
 
     AgentStatus {
-        summary: format!(
-            "агенты: сессий {sessions}, активных {active}, контекст макс. {ctx}"
-        ),
+        summary: format!("агенты: сессий {sessions}, активных {active}, контекст макс. {ctx}"),
         token_rate: token_rate
             .map(|value| format!("токены/мин: {}", short_rate(value)))
             .unwrap_or_else(|| "токены/мин: нет данных abtop".to_string()),
@@ -936,7 +933,10 @@ mod tests {
     #[test]
     fn peak_percent_returns_max() {
         let windows = summarize_me(&demo_payload(), 75.0, 90.0);
-        assert_eq!(peak_percent(windows[0].credits.as_ref(), windows[0].requests.as_ref()).unwrap(), 78.0);
+        assert_eq!(
+            peak_percent(windows[0].credits.as_ref(), windows[0].requests.as_ref()).unwrap(),
+            78.0
+        );
     }
 
     #[test]

@@ -313,32 +313,21 @@ mod tests {
 
     #[test]
     fn window_thresholds_parsed_correctly() {
-        let args = parse_args([
-            "--threshold".to_string(),
-            "5h=80:95,7d=85:95".to_string(),
-        ])
-        .unwrap();
+        let args =
+            parse_args(["--threshold".to_string(), "5h=80:95,7d=85:95".to_string()]).unwrap();
         assert_eq!(args.window_thresholds.get("5h"), Some(&(80.0, 95.0)));
         assert_eq!(args.window_thresholds.get("7d"), Some(&(85.0, 95.0)));
     }
 
     #[test]
     fn window_threshold_rejects_invalid_key() {
-        let error = parse_args([
-            "--threshold".to_string(),
-            "1h=80".to_string(),
-        ])
-        .unwrap_err();
+        let error = parse_args(["--threshold".to_string(), "1h=80".to_string()]).unwrap_err();
         assert!(error.contains("must be one of: 5h, 24h, 7d, 30d"));
     }
 
     #[test]
     fn window_threshold_rejects_bad_format() {
-        let error = parse_args([
-            "--threshold".to_string(),
-            "5h80".to_string(),
-        ])
-        .unwrap_err();
+        let error = parse_args(["--threshold".to_string(), "5h80".to_string()]).unwrap_err();
         assert!(error.contains("format"));
     }
 

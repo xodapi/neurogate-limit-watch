@@ -91,12 +91,9 @@ fn format_agent(agent: &Value) -> String {
         .get("agent_cli")
         .and_then(Value::as_str)
         .unwrap_or("agent");
-    let sessions =
-        ng::value_string(agent.get("sessions")).unwrap_or_else(|| "?".to_string());
-    let active =
-        ng::value_string(agent.get("active")).unwrap_or_else(|| "?".to_string());
-    let tokens =
-        ng::value_string(agent.get("active_tokens")).unwrap_or_else(|| "?".to_string());
+    let sessions = ng::value_string(agent.get("sessions")).unwrap_or_else(|| "?".to_string());
+    let active = ng::value_string(agent.get("active")).unwrap_or_else(|| "?".to_string());
+    let tokens = ng::value_string(agent.get("active_tokens")).unwrap_or_else(|| "?".to_string());
     let context = agent
         .get("max_context_pct")
         .and_then(ng::to_number)
@@ -108,16 +105,23 @@ fn format_agent(agent: &Value) -> String {
 fn exit_code(windows: &[ng::WindowState], fail_on: FailOn) -> i32 {
     match fail_on {
         FailOn::Never => 0,
-        FailOn::Danger => windows
-            .iter()
-            .any(|window| window.level == "danger")
-            .then_some(3)
-            .unwrap_or(0),
-        FailOn::Warning => windows
-            .iter()
-            .any(|window| matches!(window.level.as_str(), "warning" | "danger"))
-            .then_some(2)
-            .unwrap_or(0),
+        FailOn::Danger => {
+            if windows.iter().any(|window| window.level == "danger") {
+                3
+            } else {
+                0
+            }
+        }
+        FailOn::Warning => {
+            if windows
+                .iter()
+                .any(|window| matches!(window.level.as_str(), "warning" | "danger"))
+            {
+                2
+            } else {
+                0
+            }
+        }
     }
 }
 
