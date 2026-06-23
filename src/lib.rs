@@ -270,35 +270,94 @@ pub fn summarize_me_with_thresholds(
 }
 
 fn extract_usage_rows(payload: &Value) -> Vec<&Map<String, Value>> {
+    // Try usage.rows at various nesting levels
     if let Some(rows) = payload
         .get("usage")
         .and_then(Value::as_object)
-        .and_then(|usage| usage.get("rows"))
+        .and_then(|u| u.get("rows"))
         .and_then(Value::as_array)
     {
-        return object_rows(rows);
+        let parsed = object_rows(rows);
+        if !parsed.is_empty() {
+            return parsed;
+        }
     }
 
     if let Some(rows) = payload
         .get("data")
         .and_then(Value::as_object)
-        .and_then(|data| data.get("usage"))
+        .and_then(|d| d.get("usage"))
         .and_then(Value::as_object)
-        .and_then(|usage| usage.get("rows"))
+        .and_then(|u| u.get("rows"))
         .and_then(Value::as_array)
     {
-        return object_rows(rows);
+        let parsed = object_rows(rows);
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
+
+    if let Some(rows) = payload.get("rows").and_then(Value::as_array) {
+        let parsed = object_rows(rows);
+        if !parsed.is_empty() {
+            return parsed;
+        }
     }
 
     if let Some(rows) = payload
-        .as_object()
-        .and_then(|object| object.get("rows"))
+        .get("data")
+        .and_then(Value::as_object)
+        .and_then(|d| d.get("rows"))
         .and_then(Value::as_array)
     {
-        return object_rows(rows);
+        let parsed = object_rows(rows);
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
+
+    if let Some(rows) = payload.get("usage").and_then(Value::as_array) {
+        let parsed = object_rows(rows);
+        if !parsed.is_empty() {
+            return parsed;
+        }
+    }
+
+    // Last resort: scan all arrays for objects with credit/request fields
+    if let Some(object) = payload.as_object() {
+        for (_key, value) in object {
+            if let Some(rows) = value.as_array() {
+                let parsed = object_rows(rows);
+                if parsed.iter().any(|row| has_usage_fields(row)) {
+                    return parsed;
+                }
+            }
+        }
+        if let Some(data) = object.get("data").and_then(Value::as_object) {
+            for (_key, value) in data {
+                if let Some(rows) = value.as_array() {
+                    let parsed = object_rows(rows);
+                    if parsed.iter().any(|row| has_usage_fields(row)) {
+                        return parsed;
+                    }
+                }
+            }
+        }
     }
 
     Vec::new()
+}
+
+fn has_usage_fields(row: &Map<String, Value>) -> bool {
+    for key in row.keys() {
+        let lower = key.to_lowercase();
+        if (lower.contains("credit") || lower.contains("request") || lower.contains("limit"))
+            && row.get(key.as_str()).and_then(to_number).is_some()
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn object_rows(rows: &[Value]) -> Vec<&Map<String, Value>> {
@@ -878,5 +937,45 @@ mod tests {
     fn peak_percent_returns_max() {
         let windows = summarize_me(&demo_payload(), 75.0, 90.0);
         assert_eq!(peak_percent(windows[0].credits.as_ref(), windows[0].requests.as_ref()).unwrap(), 78.0);
+    }
+
+    #[test]
+    fn extract_usage_rows_handles_nested_data_usage() {
+        let payload = json!({
+            "data": {
+                "usage": {
+                    "rows": [{"credits5Hours": 10, "creditLimit5Hours": 100}]
+                }
+            }
+        });
+        let windows = summarize_me(&payload, 75.0, 90.0);
+        assert!(!windows.is_empty());
+        assert_eq!(windows[0].credits.as_ref().unwrap().used, 10.0);
+    }
+
+    #[test]
+    fn extract_usage_rows_handles_flat_rows() {
+        let payload = json!({
+            "rows": [{"credits5Hours": 20, "creditLimit5Hours": 100}]
+        });
+        let windows = summarize_me(&payload, 75.0, 90.0);
+        assert!(!windows.is_empty());
+    }
+
+    #[test]
+    fn extract_usage_rows_handles_string_numbers() {
+        let payload = json!({
+            "usage": {"rows": [{"credits5Hours": "30", "creditLimit5Hours": "100"}]}
+        });
+        let windows = summarize_me(&payload, 75.0, 90.0);
+        assert!(!windows.is_empty());
+        assert_eq!(windows[0].credits.as_ref().unwrap().used, 30.0);
+    }
+
+    #[test]
+    fn summarize_me_returns_empty_for_unknown_schema() {
+        let payload = json!({"something": "unrelated"});
+        let windows = summarize_me(&payload, 75.0, 90.0);
+        assert!(windows.is_empty());
     }
 }
