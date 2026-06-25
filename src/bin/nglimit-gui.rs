@@ -16,13 +16,25 @@ fn main() {
     let weak = app.as_weak();
     let http_clone = http.clone();
     app.on_refresh_requested(move || {
-        start_refresh(weak.clone(), false, http_clone.clone(), 75.0, 90.0);
+        start_refresh(
+            weak.clone(),
+            false,
+            http_clone.clone(),
+            ng::DEFAULT_WARNING_THRESHOLD,
+            ng::DEFAULT_DANGER_THRESHOLD,
+        );
     });
 
     let weak = app.as_weak();
     let http_clone = http.clone();
     app.on_demo_requested(move || {
-        start_refresh(weak.clone(), true, http_clone.clone(), 75.0, 90.0);
+        start_refresh(
+            weak.clone(),
+            true,
+            http_clone.clone(),
+            ng::DEFAULT_WARNING_THRESHOLD,
+            ng::DEFAULT_DANGER_THRESHOLD,
+        );
     });
 
     let weak = app.as_weak();
@@ -41,10 +53,22 @@ fn main() {
     let weak = app.as_weak();
     let http_clone = http.clone();
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
-        start_refresh(weak.clone(), false, http_clone.clone(), 75.0, 90.0);
+        start_refresh(
+            weak.clone(),
+            false,
+            http_clone.clone(),
+            ng::DEFAULT_WARNING_THRESHOLD,
+            ng::DEFAULT_DANGER_THRESHOLD,
+        );
     });
 
-    start_refresh(app.as_weak(), false, http, 75.0, 90.0);
+    start_refresh(
+        app.as_weak(),
+        false,
+        http,
+        ng::DEFAULT_WARNING_THRESHOLD,
+        ng::DEFAULT_DANGER_THRESHOLD,
+    );
     app.run().expect("Slint event loop failed");
 }
 
@@ -212,6 +236,7 @@ fn runtime_config(dotenv: &HashMap<String, String>) -> ng::RuntimeConfig {
         api_base: ng::config_value("NEUROGATE_API_BASE", dotenv)
             .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
         api_key: ng::config_value("NEUROGATE_API_KEY", dotenv).unwrap_or_default(),
-        abtop_bin: ng::config_value("ABTOP_BIN", dotenv).unwrap_or_else(|| "abtop".to_string()),
+        abtop_bin: ng::config_value("ABTOP_BIN", dotenv)
+            .unwrap_or_else(|| ng::DEFAULT_ABTOP_BIN.to_string()),
     }
 }

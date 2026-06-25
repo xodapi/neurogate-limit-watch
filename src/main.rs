@@ -46,7 +46,7 @@ fn windows_console_process_count() -> u32 {
         fn GetConsoleProcessList(process_list: *mut u32, process_count: u32) -> u32;
     }
 
-    let mut processes = [0_u32; 8];
+    let mut processes = [0_u32; cli::constants::MAX_CONSOLE_PROCESSES];
     unsafe { GetConsoleProcessList(processes.as_mut_ptr(), processes.len() as u32) }
 }
 
@@ -88,7 +88,7 @@ fn merge_args_with_config(args: Args, config: &Config) -> Result<Args, String> {
 
     Ok(Args {
         api_base: args.api_base.or(merged.api_base),
-        api_key_env: if args.api_key_env == "NEUROGATE_API_KEY" {
+        api_key_env: if args.api_key_env == cli::constants::DEFAULT_API_KEY_ENV {
             merged.api_key_env
         } else {
             args.api_key_env
@@ -122,15 +122,21 @@ fn merge_args_with_config(args: Args, config: &Config) -> Result<Args, String> {
         } else {
             args.fail_on
         },
-        warning_threshold: if (args.warning_threshold - 75.0).abs() < f64::EPSILON
-            && (merged.warning_threshold - 75.0).abs() > f64::EPSILON
+        warning_threshold: if (args.warning_threshold - cli::constants::DEFAULT_WARNING_THRESHOLD)
+            .abs()
+            < f64::EPSILON
+            && (merged.warning_threshold - cli::constants::DEFAULT_WARNING_THRESHOLD).abs()
+                > f64::EPSILON
         {
             merged.warning_threshold
         } else {
             args.warning_threshold
         },
-        danger_threshold: if (args.danger_threshold - 90.0).abs() < f64::EPSILON
-            && (merged.danger_threshold - 90.0).abs() > f64::EPSILON
+        danger_threshold: if (args.danger_threshold - cli::constants::DEFAULT_DANGER_THRESHOLD)
+            .abs()
+            < f64::EPSILON
+            && (merged.danger_threshold - cli::constants::DEFAULT_DANGER_THRESHOLD).abs()
+                > f64::EPSILON
         {
             merged.danger_threshold
         } else {

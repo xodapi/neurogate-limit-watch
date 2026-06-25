@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use neurogate_limit_watch::VERSION;
 
+use super::constants;
 use super::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +56,7 @@ where
 {
     let mut parsed = Args {
         api_base: None,
-        api_key_env: "NEUROGATE_API_KEY".to_string(),
+        api_key_env: constants::DEFAULT_API_KEY_ENV.to_string(),
         env_file: None,
         demo: false,
         mock: None,
@@ -67,8 +68,8 @@ where
         notify: false,
         watch: 0,
         fail_on: FailOn::Never,
-        warning_threshold: 75.0,
-        danger_threshold: 90.0,
+        warning_threshold: constants::DEFAULT_WARNING_THRESHOLD,
+        danger_threshold: constants::DEFAULT_DANGER_THRESHOLD,
         window_thresholds: HashMap::new(),
         help: false,
         version: false,

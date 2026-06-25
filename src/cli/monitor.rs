@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use neurogate_limit_watch::{self as ng, VERSION};
 
 use super::args::{Args, Preset};
+use super::constants;
 use super::notify::Notifier;
 use super::theme::{Palette, Theme};
 
@@ -736,10 +737,10 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
         .style(pal.header_style());
 
     let popup_area = Rect {
-        x: area.width.saturating_sub(50) / 2,
-        y: area.height.saturating_sub(20) / 2,
-        width: 50.min(area.width),
-        height: 20.min(area.height),
+        x: area.width.saturating_sub(constants::HELP_WIDTH) / 2,
+        y: area.height.saturating_sub(constants::HELP_HEIGHT) / 2,
+        width: constants::HELP_WIDTH.min(area.width),
+        height: constants::HELP_HEIGHT.min(area.height),
     };
 
     frame.render_widget(help_widget, popup_area);
@@ -747,7 +748,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
 
 fn monitor_interval(args: &Args) -> u64 {
     if args.watch == 0 {
-        5
+        constants::DEFAULT_WATCH_INTERVAL
     } else {
         args.watch.max(1)
     }

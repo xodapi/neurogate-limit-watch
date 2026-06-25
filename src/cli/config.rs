@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use super::args::{FailOn, Preset};
+use super::constants;
 use super::theme::Theme;
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -67,11 +68,11 @@ impl Config {
     }
 
     pub fn warning(&self) -> f64 {
-        self.warning.unwrap_or(75.0)
+        self.warning.unwrap_or(constants::DEFAULT_WARNING_THRESHOLD)
     }
 
     pub fn danger(&self) -> f64 {
-        self.danger.unwrap_or(90.0)
+        self.danger.unwrap_or(constants::DEFAULT_DANGER_THRESHOLD)
     }
 
     pub fn window_thresholds(&self) -> Result<HashMap<String, (f64, f64)>, String> {
@@ -98,7 +99,7 @@ impl Config {
             api_key_env: self
                 .api_key_env
                 .clone()
-                .unwrap_or_else(|| "NEUROGATE_API_KEY".to_string()),
+                .unwrap_or_else(|| constants::DEFAULT_API_KEY_ENV.to_string()),
             env_file: self.env_file.as_ref().map(PathBuf::from),
             demo: self.demo.unwrap_or(false),
             mock: self.mock.clone(),

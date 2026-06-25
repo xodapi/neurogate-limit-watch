@@ -9,6 +9,9 @@ pub const DEFAULT_API_BASE: &str = "https://api.neurogate.space";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const USER_AGENT: &str = concat!("neurogate-limit-watch/", env!("CARGO_PKG_VERSION"));
 pub const USER_AGENT_GUI: &str = concat!("neurogate-limit-watch-gui/", env!("CARGO_PKG_VERSION"));
+pub const DEFAULT_WARNING_THRESHOLD: f64 = 75.0;
+pub const DEFAULT_DANGER_THRESHOLD: f64 = 90.0;
+pub const DEFAULT_ABTOP_BIN: &str = "abtop";
 
 pub const WINDOWS: [(&str, &str, &str, &str); 4] = [
     (
@@ -75,7 +78,8 @@ impl RuntimeConfig {
                 .or_else(|| config_value("NEUROGATE_API_BASE", &dotenv))
                 .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
             api_key: config_value(api_key_env, &dotenv).unwrap_or_default(),
-            abtop_bin: config_value("ABTOP_BIN", &dotenv).unwrap_or_else(|| "abtop".to_string()),
+            abtop_bin: config_value("ABTOP_BIN", &dotenv)
+                .unwrap_or_else(|| DEFAULT_ABTOP_BIN.to_string()),
         })
     }
 }
@@ -652,9 +656,9 @@ pub fn dashboard_status(windows: &[WindowState]) -> String {
 }
 
 fn window_level_from_peak(peak: f64) -> &'static str {
-    if peak >= 90.0 {
+    if peak >= DEFAULT_DANGER_THRESHOLD {
         "лимит"
-    } else if peak >= 75.0 {
+    } else if peak >= DEFAULT_WARNING_THRESHOLD {
         "внимание"
     } else {
         "норма"
