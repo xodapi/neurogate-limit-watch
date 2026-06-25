@@ -1001,4 +1001,178 @@ mod tests {
         }
         assert_eq!(hist.sparkline_values().len(), SPARKLINE_LEN);
     }
+
+    // ── snapshot tests for ratatui TUI ─────────────────────────────────
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_tui_to_string(
+        snapshot: Option<&StatusSnapshot>,
+        error: Option<&str>,
+        interval_secs: u64,
+        next_refresh_secs: u64,
+        with_abtop: bool,
+        warning_threshold: f64,
+        window_history: &HashMap<&str, WindowHistory>,
+        preset: Preset,
+        width: u16,
+        height: u16,
+    ) -> String {
+        use ratatui::backend::TestBackend;
+        let backend = TestBackend::new(width, height);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                draw_frame(
+                    frame,
+                    snapshot,
+                    error,
+                    interval_secs,
+                    next_refresh_secs,
+                    with_abtop,
+                    warning_threshold,
+                    window_history,
+                    preset,
+                );
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let mut out = String::new();
+        for y in 0..height {
+            for x in 0..width {
+                let cell = &buffer[(x, y)];
+                out.push_str(cell.symbol());
+            }
+            out.push('\n');
+        }
+        out
+    }
+
+    #[test]
+    fn tui_snapshot_full_preset() {
+        let snapshot = test_snapshot();
+        let mut history = HashMap::new();
+        history.insert("5h", {
+            let mut h = WindowHistory::new();
+            h.record(78.0);
+            h
+        });
+        history.insert("24h", {
+            let mut h = WindowHistory::new();
+            h.record(45.0);
+            h
+        });
+        history.insert("7d", {
+            let mut h = WindowHistory::new();
+            h.record(30.0);
+            h
+        });
+        history.insert("30d", {
+            let mut h = WindowHistory::new();
+            h.record(12.0);
+            h
+        });
+
+        let output = render_tui_to_string(
+            Some(&snapshot),
+            None,
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Full,
+            120,
+            40,
+        );
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn tui_snapshot_compact_preset() {
+        let snapshot = test_snapshot();
+        let mut history = HashMap::new();
+        history.insert("5h", {
+            let mut h = WindowHistory::new();
+            h.record(78.0);
+            h
+        });
+
+        let output = render_tui_to_string(
+            Some(&snapshot),
+            None,
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Compact,
+            80,
+            25,
+        );
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn tui_snapshot_mini_preset() {
+        let snapshot = test_snapshot();
+        let mut history = HashMap::new();
+        history.insert("5h", {
+            let mut h = WindowHistory::new();
+            h.record(78.0);
+            h
+        });
+
+        let output = render_tui_to_string(
+            Some(&snapshot),
+            None,
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Mini,
+            60,
+            15,
+        );
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn tui_snapshot_with_error() {
+        let snapshot = test_snapshot();
+        let history = HashMap::new();
+
+        let output = render_tui_to_string(
+            Some(&snapshot),
+            Some("connection timeout"),
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Full,
+            100,
+            30,
+        );
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn tui_snapshot_waiting() {
+        let history = HashMap::new();
+
+        let output = render_tui_to_string(
+            None,
+            None,
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Full,
+            100,
+            30,
+        );
+        insta::assert_snapshot!(output);
+    }
 }

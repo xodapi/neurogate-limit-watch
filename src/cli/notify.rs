@@ -68,6 +68,7 @@ impl Notifier {
             return;
         }
         for window in windows {
+            // Check for escalation (warning/danger)
             if let Some(message) = next_notification(&mut self.last_levels, window) {
                 if let Err(error) = fire_desktop_notification(&message) {
                     if !self.failure_reported {
@@ -75,6 +76,10 @@ impl Notifier {
                         self.failure_reported = true;
                     }
                 }
+            }
+            // Check for recovery (back to ok from warning/danger)
+            if let Some(message) = recovery_notification(&mut self.last_levels, window) {
+                let _ = fire_desktop_notification(&message);
             }
         }
     }
@@ -106,6 +111,37 @@ fn next_notification(
         title,
         body: notification_body(window),
     })
+}
+
+fn recovery_notification(
+    last_levels: &mut HashMap<String, AlertLevel>,
+    window: &ng::WindowState,
+) -> Option<NotificationMessage> {
+    let level = AlertLevel::from_summary(&window.level);
+    let previous = last_levels
+        .get(window.key)
+        .copied()
+        .unwrap_or(AlertLevel::Ok);
+
+    // Only notify on recovery from warning/danger to ok
+    if level != AlertLevel::Ok || previous == AlertLevel::Ok {
+        return None;
+    }
+
+    last_levels.insert(window.key.to_string(), level);
+
+    Some(NotificationMessage {
+        window: window.key.to_string(),
+        level: AlertLevel::Ok,
+        title: format!("NeuroGate: {} window recovered", window.key),
+        body: recovery_body(window, &previous),
+    })
+}
+
+fn recovery_body(window: &ng::WindowState, previous: &AlertLevel) -> String {
+    let reset = ng::format_duration_opt(window.reset_in_seconds);
+    let recovered_from = previous.label();
+    format!("Quota recovered from {} | reset {}", recovered_from, reset)
 }
 
 fn notification_body(window: &ng::WindowState) -> String {
@@ -272,5 +308,33 @@ mod tests {
         let body = notification_body(&window);
         assert!(body.contains("78.0%"));
         assert!(body.contains("credits"));
+    }
+
+    #[test]
+    fn recovery_notification_fires_on_recovery() {
+        let mut last_levels = HashMap::new();
+        let warning = test_window("5h", "warning", 78.0);
+        let ok = test_window("5h", "ok", 12.0);
+
+        // First escalation
+        assert_eq!(
+            next_notification(&mut last_levels, &warning).unwrap().level,
+            AlertLevel::Warning
+        );
+
+        // Recovery to ok should fire recovery notification
+        assert!(recovery_notification(&mut last_levels, &ok).is_some());
+
+        // No duplicate recovery notification
+        assert!(recovery_notification(&mut last_levels, &ok).is_none());
+    }
+
+    #[test]
+    fn recovery_notification_does_not_fire_without_prior_warning() {
+        let mut last_levels = HashMap::new();
+        let ok = test_window("5h", "ok", 12.0);
+
+        // No prior warning/danger, so no recovery notification
+        assert!(recovery_notification(&mut last_levels, &ok).is_none());
     }
 }
