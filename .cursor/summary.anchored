@@ -1,0 +1,30 @@
+## Goal
+- Phase A (multi-account), UX improvements, Phase B (30-day trends) for neurogate-limit-watch
+
+## Progress
+### Done (committed)
+- **Technical debt refactoring**: Magic numbers → `constants.rs`.
+- **Phase A1-A4**: `accounts.toml`, `--account`/`--list-accounts`, TUI Tab switching, GUI dropdown.
+- **UX-1**: ANSI colored CLI output.
+- **UX-2**: `nglimit --doctor` — system diagnostics.
+- **UX-3**: `nglimit --init` — interactive setup wizard.
+- **UX-4**: Actionable error messages (HTTP status hints, --help suggestion, account listing).
+- **Phase B**: `nglimit --trend` — 30-day trends with redb (embedded, ACID, no C deps). Auto-saves snapshots, human/JSON output, `--days` control.
+
+### Commits
+- `c7a8b3a` Phase B: 30-day usage trends with redb
+- `bb22811` UX-2 UX-3 UX-4: --doctor, --init, better errors, contest README
+- `6ef8152` feat: Slint GUI account dropdown
+- `b1bff62` feat: TUI account switching via Tab key
+
+## Key Decisions
+- redb v2 — pure Rust, ACID, single-file, zero C dependencies
+- Snapshots saved automatically in both `run_once` and `run_monitor`
+- Trend data grouped by day, aggregated (avg/max/min)
+- Database at `~/.config/nglimit/trends.redb`
+- `--trend --json` for machine-readable export
+
+## What's next
+- Phase C (WebSocket/SSE streaming), D (System tray), E (CI polish)
+- Contest prep: screenshots, video, README.ru sync, release binaries
+- Trend overlay in TUI monitor

@@ -17,7 +17,7 @@ use super::args::{Args, Preset};
 use super::constants;
 use super::notify::Notifier;
 use super::theme::{Palette, Theme};
-use super::trends::TrendStore;
+use super::trends::{TrendDay, TrendStore};
 
 const SPARKLINE_LEN: usize = 20;
 
@@ -27,6 +27,7 @@ pub struct PanelState {
     pub show_quota: bool,
     pub show_alerts: bool,
     pub show_agents: bool,
+    pub show_trends: bool,
     pub show_footer: bool,
     pub show_help: bool,
 }
@@ -38,6 +39,7 @@ impl Default for PanelState {
             show_quota: true,
             show_alerts: true,
             show_agents: true,
+            show_trends: false,
             show_footer: true,
             show_help: false,
         }
@@ -51,7 +53,8 @@ impl PanelState {
             2 => self.show_quota = !self.show_quota,
             3 => self.show_alerts = !self.show_alerts,
             4 => self.show_agents = !self.show_agents,
-            5 => self.show_footer = !self.show_footer,
+            5 => self.show_trends = !self.show_trends,
+            6 => self.show_footer = !self.show_footer,
             _ => {}
         }
     }
@@ -131,6 +134,7 @@ pub fn run_monitor(
     let mut force_refresh = true;
     let mut next_refresh = Instant::now();
     let mut window_history: HashMap<&str, WindowHistory> = HashMap::new();
+    let mut trend_days: Vec<TrendDay> = Vec::new();
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
     let mut panels = PanelState::default();
 
@@ -147,6 +151,9 @@ pub fn run_monitor(
                 Ok(snapshot) => {
                     if let Some(store) = trends {
                         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
+                        if let Ok(days) = store.query_trends(30) {
+                            trend_days = days;
+                        }
                     }
                     for window in &snapshot.windows {
                         let hist = window_history
@@ -194,6 +201,7 @@ pub fn run_monitor(
                     args.theme,
                     &panels,
                     current_account_name,
+                    &trend_days,
                 );
             })
             .map_err(|error| format!("cannot draw terminal frame: {error}"))?;
@@ -241,6 +249,7 @@ fn draw_frame(
     theme: Theme,
     panels: &PanelState,
     current_account: Option<&str>,
+    trend_days: &[TrendDay],
 ) {
     if panels.show_help {
         draw_help_overlay(frame, theme);
@@ -260,6 +269,9 @@ fn draw_frame(
         constraints.push(Constraint::Length(header_len));
     }
     constraints.push(Constraint::Min(4));
+    if panels.show_trends {
+        constraints.push(Constraint::Length(8));
+    }
     if panels.show_footer {
         constraints.push(Constraint::Length(footer_len));
     }
@@ -287,6 +299,10 @@ fn draw_frame(
             &pal,
             panels,
         );
+        idx += 1;
+    }
+    if panels.show_trends {
+        draw_trend_panel(frame, chunks[idx], trend_days, &pal, preset);
         idx += 1;
     }
     if panels.show_footer {
@@ -735,6 +751,78 @@ fn draw_agents_panel(
     frame.render_widget(widget, area);
 }
 
+fn draw_trend_panel(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    trend_days: &[TrendDay],
+    pal: &Palette,
+    preset: Preset,
+) {
+    let block = Block::default()
+        .title(" 30-day trends ")
+        .borders(Borders::ALL)
+        .border_style(pal.border_style());
+
+    if trend_days.is_empty() {
+        let msg = Paragraph::new(Span::styled(
+            "no trend data yet — run nglimit to collect snapshots",
+            pal.muted_style(),
+        ))
+        .block(block);
+        frame.render_widget(msg, area);
+        return;
+    }
+
+    let max_bars = match preset {
+        Preset::Mini => 14,
+        Preset::Compact => 21,
+        Preset::Full => 30,
+    };
+
+    let days: Vec<&TrendDay> = trend_days.iter().rev().take(max_bars).collect::<Vec<_>>();
+    let days = days.into_iter().rev().collect::<Vec<_>>();
+
+    let mut lines: Vec<Line> = Vec::new();
+    for w_key in ["5h", "24h", "7d", "30d"] {
+        let peaks: Vec<f64> = days
+            .iter()
+            .map(|d| {
+                d.windows
+                    .iter()
+                    .find(|w| w.key == w_key)
+                    .map(|w| w.peak_max)
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        let max_p = peaks.iter().cloned().fold(0.0_f64, f64::max).max(1.0);
+        let bar_chars: String = peaks
+            .iter()
+            .map(|p| {
+                let bars = ((p / max_p) * 8.0).round() as usize;
+                match bars.min(8) {
+                    0 => ' ',
+                    1 => '▁',
+                    2 => '▂',
+                    3 => '▃',
+                    4 => '▄',
+                    5 => '▅',
+                    6 => '▆',
+                    7 => '▇',
+                    _ => '█',
+                }
+            })
+            .collect();
+        let max_peak = peaks.iter().cloned().fold(0.0_f64, f64::max);
+        lines.push(Line::from(vec![
+            Span::styled(format!(" {w_key} "), pal.bold_level_style("ok")),
+            Span::raw(format!(" {bar_chars}  max {max_peak:.0}%")),
+        ]));
+    }
+
+    let widget = Paragraph::new(lines).block(block);
+    frame.render_widget(widget, area);
+}
+
 fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
     let pal = theme.palette();
     let area = frame.area();
@@ -781,6 +869,10 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
         ]),
         Line::from(vec![
             Span::styled("  5", pal.key_binding_style()),
+            Span::raw("            Toggle 30-day trends"),
+        ]),
+        Line::from(vec![
+            Span::styled("  6", pal.key_binding_style()),
             Span::raw("            Toggle footer"),
         ]),
         Line::from(""),
@@ -1347,6 +1439,7 @@ mod tests {
                     theme,
                     &panels,
                     None,
+                    &[],
                 );
             })
             .unwrap();
