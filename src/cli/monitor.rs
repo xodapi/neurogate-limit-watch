@@ -18,6 +18,42 @@ use super::theme::{Palette, Theme};
 
 const SPARKLINE_LEN: usize = 20;
 
+#[derive(Debug, Clone)]
+pub struct PanelState {
+    pub show_header: bool,
+    pub show_quota: bool,
+    pub show_alerts: bool,
+    pub show_agents: bool,
+    pub show_footer: bool,
+    pub show_help: bool,
+}
+
+impl Default for PanelState {
+    fn default() -> Self {
+        Self {
+            show_header: true,
+            show_quota: true,
+            show_alerts: true,
+            show_agents: true,
+            show_footer: true,
+            show_help: false,
+        }
+    }
+}
+
+impl PanelState {
+    pub fn toggle(&mut self, panel: u8) {
+        match panel {
+            1 => self.show_header = !self.show_header,
+            2 => self.show_quota = !self.show_quota,
+            3 => self.show_alerts = !self.show_alerts,
+            4 => self.show_agents = !self.show_agents,
+            5 => self.show_footer = !self.show_footer,
+            _ => {}
+        }
+    }
+}
+
 #[allow(dead_code)]
 pub struct StatusSnapshot {
     pub windows: Vec<ng::WindowState>,
@@ -78,6 +114,7 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
     let mut next_refresh = Instant::now();
     let mut window_history: HashMap<&str, WindowHistory> = HashMap::new();
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
+    let mut panels = PanelState::default();
 
     loop {
         let now = Instant::now();
@@ -122,6 +159,7 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                     &window_history,
                     args.preset,
                     args.theme,
+                    &panels,
                 );
             })
             .map_err(|error| format!("cannot draw terminal frame: {error}"))?;
@@ -136,6 +174,12 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                         return Ok(130);
                     }
                     KeyCode::Char('r') => force_refresh = true,
+                    KeyCode::Char('?') => panels.show_help = !panels.show_help,
+                    KeyCode::Char('1') => panels.toggle(1),
+                    KeyCode::Char('2') => panels.toggle(2),
+                    KeyCode::Char('3') => panels.toggle(3),
+                    KeyCode::Char('4') => panels.toggle(4),
+                    KeyCode::Char('5') => panels.toggle(5),
                     _ => {}
                 },
                 Event::Resize(_, _) => {}
@@ -157,7 +201,13 @@ fn draw_frame(
     window_history: &HashMap<&str, WindowHistory>,
     preset: Preset,
     theme: Theme,
+    panels: &PanelState,
 ) {
+    if panels.show_help {
+        draw_help_overlay(frame, theme);
+        return;
+    }
+
     let area = frame.area();
     let pal = theme.palette();
     let (header_len, footer_len) = match preset {
@@ -165,28 +215,44 @@ fn draw_frame(
         Preset::Compact => (2, 1),
         Preset::Full => (3, 3),
     };
+
+    let mut constraints = Vec::new();
+    if panels.show_header {
+        constraints.push(Constraint::Length(header_len));
+    }
+    constraints.push(Constraint::Min(4));
+    if panels.show_footer {
+        constraints.push(Constraint::Length(footer_len));
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(header_len),
-            Constraint::Min(4),
-            Constraint::Length(footer_len),
-        ])
+        .constraints(constraints)
         .split(area);
 
-    draw_header(frame, chunks[0], snapshot, &pal);
-    draw_body(
-        frame,
-        chunks[1],
-        snapshot,
-        error,
-        with_abtop,
-        warning_threshold,
-        window_history,
-        preset,
-        &pal,
-    );
-    draw_footer(frame, chunks[2], interval_secs, next_refresh_secs, &pal);
+    let mut idx = 0;
+    if panels.show_header {
+        draw_header(frame, chunks[idx], snapshot, &pal);
+        idx += 1;
+    }
+    if panels.show_quota {
+        draw_body(
+            frame,
+            chunks[idx],
+            snapshot,
+            error,
+            with_abtop,
+            warning_threshold,
+            window_history,
+            preset,
+            &pal,
+            panels,
+        );
+        idx += 1;
+    }
+    if panels.show_footer {
+        draw_footer(frame, chunks[idx], interval_secs, next_refresh_secs, &pal);
+    }
 }
 
 fn draw_header(
@@ -238,19 +304,30 @@ fn draw_body(
     window_history: &HashMap<&str, WindowHistory>,
     preset: Preset,
     pal: &Palette,
+    panels: &PanelState,
 ) {
     let (alerts_height, cols) = match preset {
         Preset::Mini => (1, 1),
         Preset::Compact => (2, 1),
         Preset::Full => (5, 2),
     };
+
+    let mut body_constraints = Vec::new();
+    body_constraints.push(Constraint::Min(4));
+    if panels.show_alerts {
+        body_constraints.push(Constraint::Length(alerts_height));
+    }
+    if panels.show_agents {
+        body_constraints.push(Constraint::Length(alerts_height));
+    }
+
     let body_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(4), Constraint::Length(alerts_height)])
+        .constraints(body_constraints)
         .split(area);
 
     let windows_area = body_chunks[0];
-    let alerts_area = body_chunks[1];
+    let mut idx = 1;
 
     if let Some(snapshot) = snapshot {
         let rows = (snapshot.windows.len() as u16).div_ceil(cols).max(1);
@@ -300,7 +377,16 @@ fn draw_body(
         frame.render_widget(waiting, windows_area);
     }
 
-    draw_alerts(frame, alerts_area, snapshot, warning_threshold, pal);
+    if panels.show_alerts {
+        let alerts_area = body_chunks[idx];
+        idx += 1;
+        draw_alerts(frame, alerts_area, snapshot, warning_threshold, pal);
+    }
+
+    if panels.show_agents {
+        let agents_area = body_chunks[idx];
+        draw_agents_panel(frame, agents_area, snapshot, pal);
+    }
 
     if let Some(error) = error {
         let error_area = Rect {
@@ -542,6 +628,121 @@ fn load_config(args: &Args) -> Result<ng::RuntimeConfig, String> {
         &args.api_key_env,
         args.env_file.as_ref(),
     )
+}
+
+fn draw_agents_panel(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    snapshot: Option<&StatusSnapshot>,
+    pal: &Palette,
+) {
+    let block = Block::default()
+        .title(" agents ")
+        .borders(Borders::ALL)
+        .border_style(pal.border_style());
+
+    let content = match snapshot {
+        Some(s) => {
+            if let Some(abtop) = &s.abtop {
+                let token_rate = abtop
+                    .get("token_rate")
+                    .and_then(ng::to_number)
+                    .map(|v| format!("{v:.1}/min"))
+                    .unwrap_or_else(|| "n/a".into());
+                let sessions =
+                    ng::value_string(abtop.get("sessions_total")).unwrap_or_else(|| "?".into());
+                let active =
+                    ng::value_string(abtop.get("sessions_active")).unwrap_or_else(|| "?".into());
+                Line::from(Span::styled(
+                    format!("token rate {token_rate} | sessions {sessions} active {active}"),
+                    pal.accent_style(),
+                ))
+            } else {
+                Line::from(Span::styled(
+                    "run with --with-abtop for agent data",
+                    pal.muted_style(),
+                ))
+            }
+        }
+        None => Line::from(Span::styled("waiting for data", pal.muted_style())),
+    };
+
+    let widget = Paragraph::new(content).block(block);
+    frame.render_widget(widget, area);
+}
+
+fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
+    let pal = theme.palette();
+    let area = frame.area();
+
+    let help_text = vec![
+        Line::from(Span::styled(
+            "  NeuroGate Monitor - Keybindings",
+            pal.bold_level_style("ok"),
+        )),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  q / Esc", pal.key_binding_style()),
+            Span::raw("    Quit"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+C", pal.key_binding_style()),
+            Span::raw("      Force quit"),
+        ]),
+        Line::from(vec![
+            Span::styled("  r", pal.key_binding_style()),
+            Span::raw("            Force refresh"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ?", pal.key_binding_style()),
+            Span::raw("            Toggle this help"),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("  Panel Toggles:", pal.accent_style())),
+        Line::from(vec![
+            Span::styled("  1", pal.key_binding_style()),
+            Span::raw("            Toggle header"),
+        ]),
+        Line::from(vec![
+            Span::styled("  2", pal.key_binding_style()),
+            Span::raw("            Toggle quota cards"),
+        ]),
+        Line::from(vec![
+            Span::styled("  3", pal.key_binding_style()),
+            Span::raw("            Toggle alerts"),
+        ]),
+        Line::from(vec![
+            Span::styled("  4", pal.key_binding_style()),
+            Span::raw("            Toggle agents"),
+        ]),
+        Line::from(vec![
+            Span::styled("  5", pal.key_binding_style()),
+            Span::raw("            Toggle footer"),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Press ?", pal.muted_style()),
+            Span::raw(" to close this overlay"),
+        ]),
+    ];
+
+    let help_widget = Paragraph::new(help_text)
+        .block(
+            Block::default()
+                .title(" help ")
+                .borders(Borders::ALL)
+                .border_style(pal.border_style()),
+        )
+        .style(pal.header_style());
+
+    let popup_area = Rect {
+        x: area.width.saturating_sub(50) / 2,
+        y: area.height.saturating_sub(20) / 2,
+        width: 50.min(area.width),
+        height: 20.min(area.height),
+    };
+
+    frame.render_widget(help_widget, popup_area);
 }
 
 fn monitor_interval(args: &Args) -> u64 {
@@ -1066,6 +1267,7 @@ mod tests {
         use ratatui::backend::TestBackend;
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).unwrap();
+        let panels = PanelState::default();
         terminal
             .draw(|frame| {
                 draw_frame(
@@ -1079,6 +1281,7 @@ mod tests {
                     window_history,
                     preset,
                     theme,
+                    &panels,
                 );
             })
             .unwrap();
