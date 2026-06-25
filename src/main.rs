@@ -94,7 +94,23 @@ fn real_main() -> Result<i32, String> {
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
     if args.monitor {
-        return run_monitor(&args, &mut notifier);
+        let account_names = accounts.list_names();
+        let account_configs: Vec<cli::accounts::AccountConfig> = account_names
+            .iter()
+            .filter_map(|name| accounts.resolve(name).ok())
+            .collect();
+        let initial_idx = args
+            .account
+            .as_ref()
+            .and_then(|name| account_names.iter().position(|n| n == name))
+            .unwrap_or(0);
+        return run_monitor(
+            &args,
+            &mut notifier,
+            &account_names,
+            &account_configs,
+            initial_idx,
+        );
     }
 
     loop {

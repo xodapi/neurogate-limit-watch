@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use neurogate_limit_watch::{self as ng, VERSION};
 
+use super::accounts::AccountConfig;
 use super::args::{Args, Preset};
 use super::constants;
 use super::notify::Notifier;
@@ -94,7 +95,13 @@ pub fn collect_status(
     })
 }
 
-pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> {
+pub fn run_monitor(
+    args: &Args,
+    notifier: &mut Notifier,
+    account_names: &[String],
+    account_configs: &[AccountConfig],
+    initial_account_idx: usize,
+) -> Result<i32, String> {
     let interval_secs = monitor_interval(args);
     let interval = Duration::from_secs(interval_secs);
 
@@ -109,6 +116,14 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
 
     let _guard = TerminalGuard;
 
+    let has_accounts = !account_names.is_empty();
+    let total_accounts = account_names.len();
+    let mut cur_account = if has_accounts {
+        initial_account_idx.min(total_accounts - 1)
+    } else {
+        0
+    };
+
     let mut last_snapshot = None::<StatusSnapshot>;
     let mut last_error = None::<String>;
     let mut force_refresh = true;
@@ -120,7 +135,13 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
     loop {
         let now = Instant::now();
         if force_refresh || now >= next_refresh {
-            match load_config(args).and_then(|config| collect_status(args, &config, &http)) {
+            let account = if has_accounts && total_accounts > 1 {
+                Some(&account_configs[cur_account])
+            } else {
+                None
+            };
+            match load_config(args, account).and_then(|config| collect_status(args, &config, &http))
+            {
                 Ok(snapshot) => {
                     for window in &snapshot.windows {
                         let hist = window_history
@@ -147,6 +168,12 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
             .saturating_duration_since(Instant::now())
             .as_secs();
 
+        let current_account_name = if has_accounts && total_accounts > 1 {
+            Some(account_names[cur_account].as_str())
+        } else {
+            None
+        };
+
         terminal
             .draw(|frame| {
                 draw_frame(
@@ -161,6 +188,7 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                     args.preset,
                     args.theme,
                     &panels,
+                    current_account_name,
                 );
             })
             .map_err(|error| format!("cannot draw terminal frame: {error}"))?;
@@ -181,6 +209,10 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                     KeyCode::Char('3') => panels.toggle(3),
                     KeyCode::Char('4') => panels.toggle(4),
                     KeyCode::Char('5') => panels.toggle(5),
+                    KeyCode::Tab if has_accounts && total_accounts > 1 => {
+                        cur_account = (cur_account + 1) % total_accounts;
+                        force_refresh = true;
+                    }
                     _ => {}
                 },
                 Event::Resize(_, _) => {}
@@ -203,6 +235,7 @@ fn draw_frame(
     preset: Preset,
     theme: Theme,
     panels: &PanelState,
+    current_account: Option<&str>,
 ) {
     if panels.show_help {
         draw_help_overlay(frame, theme);
@@ -233,7 +266,7 @@ fn draw_frame(
 
     let mut idx = 0;
     if panels.show_header {
-        draw_header(frame, chunks[idx], snapshot, &pal);
+        draw_header(frame, chunks[idx], snapshot, &pal, current_account);
         idx += 1;
     }
     if panels.show_quota {
@@ -252,7 +285,14 @@ fn draw_frame(
         idx += 1;
     }
     if panels.show_footer {
-        draw_footer(frame, chunks[idx], interval_secs, next_refresh_secs, &pal);
+        draw_footer(
+            frame,
+            chunks[idx],
+            interval_secs,
+            next_refresh_secs,
+            &pal,
+            current_account,
+        );
     }
 }
 
@@ -261,7 +301,11 @@ fn draw_header(
     area: Rect,
     snapshot: Option<&StatusSnapshot>,
     pal: &Palette,
+    current_account: Option<&str>,
 ) {
+    let account_prefix = current_account
+        .map(|name| format!(" [{name}]"))
+        .unwrap_or_default();
     let (title, style) = match snapshot {
         Some(s) => {
             let level = ng::worst_level(&s.windows);
@@ -276,12 +320,12 @@ fn draw_header(
                 "OK"
             };
             (
-                format!(" NeuroGate v{VERSION} | {label} | peak {peak} "),
+                format!(" NeuroGate v{VERSION}{account_prefix} | {label} | peak {peak} "),
                 pal.bold_level_style(level),
             )
         }
         None => (
-            format!(" NeuroGate v{VERSION} | waiting for data... "),
+            format!(" NeuroGate v{VERSION}{account_prefix} | waiting for data... "),
             Style::default().fg(pal.muted),
         ),
     };
@@ -598,23 +642,34 @@ fn draw_footer(
     interval_secs: u64,
     next_refresh_secs: u64,
     pal: &Palette,
+    current_account: Option<&str>,
 ) {
+    let has_multi_account = current_account.is_some();
     let height = area.height;
     let footer = if height <= 1 {
-        Paragraph::new(Line::from(vec![Span::styled(
-            format!("q quit | r refresh | {interval_secs}s/{next_refresh_secs}s"),
-            pal.muted_style(),
-        )]))
+        let mut text = format!("q quit | r refresh | {interval_secs}s/{next_refresh_secs}s");
+        if has_multi_account {
+            text = format!("Tab acct | {text}");
+        }
+        Paragraph::new(Line::from(vec![Span::styled(text, pal.muted_style())]))
     } else {
-        Paragraph::new(Line::from(vec![
+        let mut spans = vec![
             Span::styled(" q ", pal.key_binding_style()),
             Span::raw("quit  "),
             Span::styled(" r ", pal.key_binding_style()),
             Span::raw(format!(
                 "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
             )),
-        ]))
-        .block(
+        ];
+        if has_multi_account {
+            let mut with_tab = vec![
+                Span::styled(" Tab ", pal.key_binding_style()),
+                Span::raw("account  "),
+            ];
+            with_tab.extend(spans);
+            spans = with_tab;
+        }
+        Paragraph::new(Line::from(spans)).block(
             Block::default()
                 .borders(Borders::ALL)
                 .border_style(pal.border_style()),
@@ -623,12 +678,15 @@ fn draw_footer(
     frame.render_widget(footer, area);
 }
 
-fn load_config(args: &Args) -> Result<ng::RuntimeConfig, String> {
-    ng::RuntimeConfig::from_dotenv(
-        args.api_base.clone(),
-        &args.api_key_env,
-        args.env_file.as_ref(),
-    )
+fn load_config(args: &Args, account: Option<&AccountConfig>) -> Result<ng::RuntimeConfig, String> {
+    let (api_base, api_key_env) = match account {
+        Some(acct) => (
+            acct.api_base.clone().or_else(|| args.api_base.clone()),
+            acct.api_key_env.as_deref().unwrap_or(&args.api_key_env),
+        ),
+        None => (args.api_base.clone(), args.api_key_env.as_str()),
+    };
+    ng::RuntimeConfig::from_dotenv(api_base, api_key_env, args.env_file.as_ref())
 }
 
 fn draw_agents_panel(
@@ -1283,6 +1341,7 @@ mod tests {
                     preset,
                     theme,
                     &panels,
+                    None,
                 );
             })
             .unwrap();
