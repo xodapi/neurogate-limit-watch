@@ -17,6 +17,7 @@ use super::args::{Args, Preset};
 use super::constants;
 use super::notify::Notifier;
 use super::theme::{Palette, Theme};
+use super::trends::TrendStore;
 
 const SPARKLINE_LEN: usize = 20;
 
@@ -101,6 +102,7 @@ pub fn run_monitor(
     account_names: &[String],
     account_configs: &[AccountConfig],
     initial_account_idx: usize,
+    trends: Option<&TrendStore>,
 ) -> Result<i32, String> {
     let interval_secs = monitor_interval(args);
     let interval = Duration::from_secs(interval_secs);
@@ -143,6 +145,9 @@ pub fn run_monitor(
             match load_config(args, account).and_then(|config| collect_status(args, &config, &http))
             {
                 Ok(snapshot) => {
+                    if let Some(store) = trends {
+                        let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
+                    }
                     for window in &snapshot.windows {
                         let hist = window_history
                             .entry(window.key)

@@ -3,14 +3,19 @@ use serde_json::Value;
 use neurogate_limit_watch as ng;
 
 use super::args::{FailOn, OutputMode};
+use super::trends::TrendStore;
 
 pub fn run_once(
     args: &super::args::Args,
     config: &ng::RuntimeConfig,
     notifier: &mut super::notify::Notifier,
     http: &ng::HttpClient,
+    trends: Option<&TrendStore>,
 ) -> Result<i32, String> {
     let snapshot = super::monitor::collect_status(args, config, http)?;
+    if let Some(store) = trends {
+        let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
+    }
     let status = ng::summary_to_json(&snapshot.windows, snapshot.abtop.as_ref());
 
     match args.output {

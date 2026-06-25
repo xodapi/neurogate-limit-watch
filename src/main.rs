@@ -13,6 +13,7 @@ use cli::config::{Config, MergedConfig};
 use cli::monitor::run_monitor;
 use cli::notify::Notifier;
 use cli::output::run_once;
+use cli::trends::{print_trends_human, print_trends_json, TrendStore};
 
 fn main() {
     let code = match real_main() {
@@ -124,6 +125,24 @@ fn real_main() -> Result<i32, String> {
 
     let args = merge_args_with_config(cli_args, &merged);
 
+    if args.trend {
+        let store = TrendStore::open_readonly()?;
+        match store {
+            Some(s) => {
+                let days = s.query_trends(args.trend_days)?;
+                match args.output {
+                    cli::args::OutputMode::Json => print_trends_json(&days),
+                    _ => print_trends_human(&days),
+                }
+            }
+            None => {
+                println!("No trend data found. Run nglimit a few times to collect snapshots.");
+            }
+        }
+        return Ok(0);
+    }
+
+    let trends = TrendStore::open()?;
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
     if args.monitor {
@@ -143,12 +162,13 @@ fn real_main() -> Result<i32, String> {
             &account_names,
             &account_configs,
             initial_idx,
+            trends.as_ref(),
         );
     }
 
     loop {
         let dotenv = load_config(&args)?;
-        let code = run_once(&args, &dotenv, &mut notifier, &http)?;
+        let code = run_once(&args, &dotenv, &mut notifier, &http, trends.as_ref())?;
         if args.watch == 0 {
             return Ok(code);
         }
@@ -227,6 +247,8 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         list_accounts: args.list_accounts,
         doctor: args.doctor,
         init: args.init,
+        trend: args.trend,
+        trend_days: args.trend_days,
         help: args.help,
         version: args.version,
         config: args.config,

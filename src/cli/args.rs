@@ -49,6 +49,8 @@ pub struct Args {
     pub list_accounts: bool,
     pub doctor: bool,
     pub init: bool,
+    pub trend: bool,
+    pub trend_days: u64,
     pub help: bool,
     pub version: bool,
     pub config: Option<PathBuf>,
@@ -79,6 +81,8 @@ where
         list_accounts: false,
         doctor: false,
         init: false,
+        trend: false,
+        trend_days: 30,
         help: false,
         version: false,
         config: None,
@@ -96,6 +100,16 @@ where
             "--list-accounts" => parsed.list_accounts = true,
             "--doctor" => parsed.doctor = true,
             "--init" => parsed.init = true,
+            "--trend" => parsed.trend = true,
+            "--days" => {
+                let value = next_value(&mut iter, "--days")?;
+                parsed.trend_days = value
+                    .parse::<u64>()
+                    .map_err(|_| "--days must be a positive integer".to_string())?;
+                if parsed.trend_days == 0 {
+                    return Err("--days must be a positive integer".to_string());
+                }
+            }
             "--demo" => parsed.demo = true,
             "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
@@ -270,6 +284,8 @@ OPTIONS:
       --list-accounts        List available account profiles
       --doctor               Run system diagnostics
       --init                 Interactive setup wizard
+      --trend                Show 30-day usage trends (requires saved snapshots)
+      --days <N>             Days of trend history to show [default: 30]
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
   -V, --version              Print version
