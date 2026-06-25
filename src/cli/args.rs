@@ -46,6 +46,7 @@ pub struct Args {
     pub window_thresholds: HashMap<String, (f64, f64)>,
     pub help: bool,
     pub version: bool,
+    pub config: Option<PathBuf>,
 }
 
 pub fn parse_args<I>(args: I) -> Result<Args, String>
@@ -71,6 +72,7 @@ where
         window_thresholds: HashMap::new(),
         help: false,
         version: false,
+        config: None,
     };
 
     let mut iter = args.into_iter();
@@ -78,6 +80,7 @@ where
         match arg.as_str() {
             "-h" | "--help" => parsed.help = true,
             "-V" | "--version" => parsed.version = true,
+            "--config" => parsed.config = Some(PathBuf::from(next_value(&mut iter, "--config")?)),
             "--demo" => parsed.demo = true,
             "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
@@ -181,7 +184,7 @@ where
         .ok_or_else(|| format!("{option} requires a value"))
 }
 
-fn parse_window_thresholds(value: &str) -> Result<HashMap<String, (f64, f64)>, String> {
+pub fn parse_window_thresholds(value: &str) -> Result<HashMap<String, (f64, f64)>, String> {
     let mut result = HashMap::new();
     for entry in value.split(',') {
         let entry = entry.trim();
@@ -243,6 +246,7 @@ OPTIONS:
       --threshold <SPEC>     Per-window thresholds, e.g. 5h=80:95,7d=90
                              Format: KEY=WARNING[:DANGER] where KEY is 5h,24h,7d,30d
       --env-file <PATH>      Load .env file explicitly
+      --config <PATH>        Load config file (default: ~/.config/nglimit/config.toml)
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
   -V, --version              Print version

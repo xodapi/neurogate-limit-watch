@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use neurogate_limit_watch::{self as ng, VERSION};
 
-use cli::args::{parse_args, FailOn};
+use cli::args::{parse_args, Args, FailOn};
+use cli::config::Config;
 use cli::monitor::run_monitor;
 use cli::notify::Notifier;
 use cli::output::run_once;
@@ -50,15 +51,19 @@ fn windows_console_process_count() -> u32 {
 }
 
 fn real_main() -> Result<i32, String> {
-    let args = parse_args(env::args().skip(1))?;
-    if args.help {
+    let cli_args = parse_args(env::args().skip(1))?;
+    if cli_args.help {
         cli::args::print_help();
         return Ok(0);
     }
-    if args.version {
+    if cli_args.version {
         println!("nglimit {VERSION}");
         return Ok(0);
     }
+
+    let config = Config::load(cli_args.config.as_ref())?;
+    let args = merge_args_with_config(cli_args, &config)?;
+
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
     if args.monitor {
@@ -76,6 +81,72 @@ fn real_main() -> Result<i32, String> {
         }
         thread::sleep(Duration::from_secs(args.watch));
     }
+}
+
+fn merge_args_with_config(args: Args, config: &Config) -> Result<Args, String> {
+    let merged = config.merge_with_defaults()?;
+
+    Ok(Args {
+        api_base: args.api_base.or(merged.api_base),
+        api_key_env: if args.api_key_env == "NEUROGATE_API_KEY" {
+            merged.api_key_env
+        } else {
+            args.api_key_env
+        },
+        env_file: args.env_file.or(merged.env_file),
+        demo: args.demo || merged.demo,
+        mock: args.mock.or(merged.mock),
+        output: args.output,
+        monitor: args.monitor || merged.monitor,
+        preset: if args.preset == cli::args::Preset::Full
+            && merged.preset != cli::args::Preset::Full
+        {
+            merged.preset
+        } else {
+            args.preset
+        },
+        theme: if args.theme == cli::theme::Theme::Btop && merged.theme != cli::theme::Theme::Btop {
+            merged.theme
+        } else {
+            args.theme
+        },
+        with_abtop: args.with_abtop || merged.with_abtop,
+        notify: args.notify || merged.notify,
+        watch: if args.watch == 0 && merged.watch != 0 {
+            merged.watch
+        } else {
+            args.watch
+        },
+        fail_on: if args.fail_on == FailOn::Never && merged.fail_on != FailOn::Never {
+            merged.fail_on
+        } else {
+            args.fail_on
+        },
+        warning_threshold: if (args.warning_threshold - 75.0).abs() < f64::EPSILON
+            && (merged.warning_threshold - 75.0).abs() > f64::EPSILON
+        {
+            merged.warning_threshold
+        } else {
+            args.warning_threshold
+        },
+        danger_threshold: if (args.danger_threshold - 90.0).abs() < f64::EPSILON
+            && (merged.danger_threshold - 90.0).abs() > f64::EPSILON
+        {
+            merged.danger_threshold
+        } else {
+            args.danger_threshold
+        },
+        window_thresholds: if args.window_thresholds.is_empty()
+            && !merged.window_thresholds.is_empty()
+        {
+            merged.window_thresholds
+        } else {
+            args.window_thresholds
+        },
+        help: args.help,
+        version: args.version,
+        config: args.config,
+    })
 }
 
 fn load_config(args: &cli::args::Args) -> Result<ng::RuntimeConfig, String> {
