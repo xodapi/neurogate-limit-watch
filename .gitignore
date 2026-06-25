@@ -9,3 +9,5 @@ build/
 target/
 .env
 neurogate-limit-watch.json
+
+.cursor/
