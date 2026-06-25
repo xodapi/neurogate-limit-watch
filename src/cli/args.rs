@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use neurogate_limit_watch::VERSION;
 
+use super::theme::Theme;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailOn {
     Never,
@@ -34,6 +36,7 @@ pub struct Args {
     pub output: OutputMode,
     pub monitor: bool,
     pub preset: Preset,
+    pub theme: Theme,
     pub with_abtop: bool,
     pub notify: bool,
     pub watch: u64,
@@ -58,6 +61,7 @@ where
         output: OutputMode::Human,
         monitor: false,
         preset: Preset::Full,
+        theme: Theme::Btop,
         with_abtop: false,
         notify: false,
         watch: 0,
@@ -89,6 +93,13 @@ where
                         ));
                     }
                 };
+            }
+            "--theme" => {
+                let name = next_value(&mut iter, "--theme")?;
+                parsed.theme = Theme::from_name(&name).ok_or_else(|| {
+                    let valid: Vec<&str> = Theme::all().iter().map(|t| t.name()).collect();
+                    format!("--theme must be one of: {}; got {name}", valid.join(", "))
+                })?;
             }
             "--with-abtop" => parsed.with_abtop = true,
             "--notify" => parsed.notify = true,
@@ -220,6 +231,9 @@ OPTIONS:
       --compact              Print one-line output for widgets/status bars
       --monitor              Full-screen live dashboard, abtop-style
       --preset <LAYOUT>      Monitor layout: full (default), compact, mini
+      --theme <THEME>        Color theme: btop (default), dracula, catppuccin, tokyo-night,
+                             gruvbox, nord, high-contrast, protanopia, deuteranopia,
+                             tritanopia, solarized, monokai
       --with-abtop           Merge local abtop --status-json output if available
       --notify               Desktop alert when a window enters warning/danger
       --watch <SECONDS>      Poll every N seconds; default is 5 in --monitor

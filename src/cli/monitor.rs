@@ -1,7 +1,7 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph, Sparkline};
 use ratatui::Terminal;
@@ -14,6 +14,7 @@ use neurogate_limit_watch::{self as ng, VERSION};
 
 use super::args::{Args, Preset};
 use super::notify::Notifier;
+use super::theme::{Palette, Theme};
 
 const SPARKLINE_LEN: usize = 20;
 
@@ -120,6 +121,7 @@ pub fn run_monitor(args: &Args, notifier: &mut Notifier) -> Result<i32, String> 
                     args.warning_threshold,
                     &window_history,
                     args.preset,
+                    args.theme,
                 );
             })
             .map_err(|error| format!("cannot draw terminal frame: {error}"))?;
@@ -154,8 +156,10 @@ fn draw_frame(
     warning_threshold: f64,
     window_history: &HashMap<&str, WindowHistory>,
     preset: Preset,
+    theme: Theme,
 ) {
     let area = frame.area();
+    let pal = theme.palette();
     let (header_len, footer_len) = match preset {
         Preset::Mini => (1, 1),
         Preset::Compact => (2, 1),
@@ -170,7 +174,7 @@ fn draw_frame(
         ])
         .split(area);
 
-    draw_header(frame, chunks[0], snapshot);
+    draw_header(frame, chunks[0], snapshot, &pal);
     draw_body(
         frame,
         chunks[1],
@@ -180,37 +184,46 @@ fn draw_frame(
         warning_threshold,
         window_history,
         preset,
+        &pal,
     );
-    draw_footer(frame, chunks[2], interval_secs, next_refresh_secs);
+    draw_footer(frame, chunks[2], interval_secs, next_refresh_secs, &pal);
 }
 
-fn draw_header(frame: &mut ratatui::Frame, area: Rect, snapshot: Option<&StatusSnapshot>) {
+fn draw_header(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    snapshot: Option<&StatusSnapshot>,
+    pal: &Palette,
+) {
     let (title, style) = match snapshot {
         Some(s) => {
             let level = ng::worst_level(&s.windows);
             let peak = ng::peak_percent_all(&s.windows)
                 .map(|v| format!("{v:.0}%"))
                 .unwrap_or_else(|| "n/a".into());
-            let (color, label) = if level == "danger" {
-                (Color::Red, "DANGER")
+            let label = if level == "danger" {
+                "DANGER"
             } else if level == "warning" {
-                (Color::Yellow, "WARNING")
+                "WARNING"
             } else {
-                (Color::Green, "OK")
+                "OK"
             };
             (
                 format!(" NeuroGate v{VERSION} | {label} | peak {peak} "),
-                Style::default().fg(color),
+                pal.bold_level_style(level),
             )
         }
         None => (
             format!(" NeuroGate v{VERSION} | waiting for data... "),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(pal.muted),
         ),
     };
 
-    let header = Paragraph::new(Line::from(Span::styled(title, style)))
-        .block(Block::default().borders(Borders::ALL).border_style(style));
+    let header = Paragraph::new(Line::from(Span::styled(title, style))).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(pal.border_style()),
+    );
     frame.render_widget(header, area);
 }
 
@@ -224,6 +237,7 @@ fn draw_body(
     warning_threshold: f64,
     window_history: &HashMap<&str, WindowHistory>,
     preset: Preset,
+    pal: &Palette,
 ) {
     let (alerts_height, cols) = match preset {
         Preset::Mini => (1, 1),
@@ -269,15 +283,24 @@ fn draw_body(
                 window_history.get(window.key),
                 warning_threshold,
                 preset,
+                pal,
             );
         }
     } else {
-        let waiting = Paragraph::new("Collecting NeuroGate status...")
-            .block(Block::default().title("Limits").borders(Borders::ALL));
+        let waiting = Paragraph::new(Span::styled(
+            "Collecting NeuroGate status...",
+            pal.muted_style(),
+        ))
+        .block(
+            Block::default()
+                .title("Limits")
+                .borders(Borders::ALL)
+                .border_style(pal.border_style()),
+        );
         frame.render_widget(waiting, windows_area);
     }
 
-    draw_alerts(frame, alerts_area, snapshot, warning_threshold);
+    draw_alerts(frame, alerts_area, snapshot, warning_threshold, pal);
 
     if let Some(error) = error {
         let error_area = Rect {
@@ -287,7 +310,7 @@ fn draw_body(
         };
         let err_widget = Paragraph::new(Span::styled(
             format!(" ! {error}"),
-            Style::default().fg(Color::Red),
+            Style::default().fg(pal.danger),
         ));
         frame.render_widget(err_widget, error_area);
     }
@@ -300,41 +323,25 @@ fn draw_window_card(
     history: Option<&WindowHistory>,
     _warning_threshold: f64,
     preset: Preset,
+    pal: &Palette,
 ) {
     let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0);
 
-    let (border_color, title_style) = match window.level.as_str() {
-        "danger" => (
-            Color::Red,
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-        ),
-        "warning" => (
-            Color::Yellow,
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ),
-        _ => (Color::Green, Style::default().fg(Color::Green)),
-    };
+    let title_style = pal.bold_level_style(&window.level);
 
     let reset_text = ng::format_duration_opt(window.reset_in_seconds);
 
     match preset {
         Preset::Mini => {
             let line = Line::from(vec![
-                Span::styled(
-                    format!("{} ", window.key),
-                    Style::default()
-                        .fg(border_color)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!("{:.0}%", peak), Style::default().fg(border_color)),
-                Span::raw(format!(" reset {}", reset_text)),
+                Span::styled(format!("{} ", window.key), title_style),
+                Span::styled(format!("{:.0}%", peak), pal.level_style(&window.level)),
+                Span::styled(format!(" reset {}", reset_text), pal.muted_style()),
             ]);
             let widget = Paragraph::new(line).block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .border_style(Style::default().fg(border_color)),
+                    .border_style(pal.border_style()),
             );
             frame.render_widget(widget, area);
         }
@@ -352,29 +359,35 @@ fn draw_window_card(
                         .title(title)
                         .title_style(title_style)
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(border_color)),
+                        .border_style(pal.border_style()),
                 )
-                .gauge_style(Style::default().fg(border_color))
+                .gauge_style(pal.gauge_style(&window.level))
                 .ratio((peak / 100.0) as f64);
             frame.render_widget(gauge, inner[0]);
 
             let credit_line = match &window.credits {
-                Some(m) => Line::from(Span::raw(format!(
-                    "cr {}/{} ({:.0}%)",
-                    ng::short_number(m.used),
-                    ng::short_number(m.limit),
-                    m.percent
-                ))),
-                None => Line::from(Span::raw("cr n/a")),
+                Some(m) => Line::from(vec![
+                    Span::styled("cr ", pal.muted_style()),
+                    Span::raw(format!(
+                        "{}/{} ({:.0}%)",
+                        ng::short_number(m.used),
+                        ng::short_number(m.limit),
+                        m.percent
+                    )),
+                ]),
+                None => Line::from(Span::styled("cr n/a", pal.muted_style())),
             };
             let request_line = match &window.requests {
-                Some(m) => Line::from(Span::raw(format!(
-                    "rq {}/{} ({:.0}%)",
-                    ng::short_number(m.used),
-                    ng::short_number(m.limit),
-                    m.percent
-                ))),
-                None => Line::from(Span::raw("rq n/a")),
+                Some(m) => Line::from(vec![
+                    Span::styled("rq ", pal.muted_style()),
+                    Span::raw(format!(
+                        "{}/{} ({:.0}%)",
+                        ng::short_number(m.used),
+                        ng::short_number(m.limit),
+                        m.percent
+                    )),
+                ]),
+                None => Line::from(Span::styled("rq n/a", pal.muted_style())),
             };
             let metrics = Paragraph::new(vec![credit_line, request_line]);
             frame.render_widget(metrics, inner[1]);
@@ -398,15 +411,15 @@ fn draw_window_card(
                         .title(title)
                         .title_style(title_style)
                         .borders(Borders::ALL)
-                        .border_style(Style::default().fg(border_color)),
+                        .border_style(pal.border_style()),
                 )
-                .gauge_style(Style::default().fg(border_color))
+                .gauge_style(pal.gauge_style(&window.level))
                 .ratio((peak / 100.0) as f64);
             frame.render_widget(gauge, inner[0]);
 
             let credit_line = match &window.credits {
                 Some(m) => Line::from(vec![
-                    Span::styled("cr ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("cr ", pal.muted_style()),
                     Span::raw(format!(
                         "{}/{} ({:.0}%)",
                         ng::short_number(m.used),
@@ -414,11 +427,11 @@ fn draw_window_card(
                         m.percent
                     )),
                 ]),
-                None => Line::from(Span::styled("cr n/a", Style::default().fg(Color::DarkGray))),
+                None => Line::from(Span::styled("cr n/a", pal.muted_style())),
             };
             let request_line = match &window.requests {
                 Some(m) => Line::from(vec![
-                    Span::styled("rq ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("rq ", pal.muted_style()),
                     Span::raw(format!(
                         "{}/{} ({:.0}%)",
                         ng::short_number(m.used),
@@ -426,7 +439,7 @@ fn draw_window_card(
                         m.percent
                     )),
                 ]),
-                None => Line::from(Span::styled("rq n/a", Style::default().fg(Color::DarkGray))),
+                None => Line::from(Span::styled("rq n/a", pal.muted_style())),
             };
             let metrics = Paragraph::new(vec![credit_line, request_line]);
             frame.render_widget(metrics, inner[1]);
@@ -435,9 +448,13 @@ fn draw_window_card(
                 let values = hist.sparkline_values();
                 if !values.is_empty() {
                     let spark = Sparkline::default()
-                        .block(Block::default().title("history"))
+                        .block(
+                            Block::default()
+                                .title("history")
+                                .border_style(pal.border_style()),
+                        )
                         .data(&values)
-                        .style(Style::default().fg(border_color));
+                        .style(pal.sparkline_style());
                     frame.render_widget(spark, inner[2]);
                 }
             }
@@ -450,6 +467,7 @@ fn draw_alerts(
     area: Rect,
     snapshot: Option<&StatusSnapshot>,
     warning_threshold: f64,
+    pal: &Palette,
 ) {
     let alerts = match snapshot {
         Some(s) => monitor_alerts(&s.windows, warning_threshold),
@@ -459,12 +477,12 @@ fn draw_alerts(
     let block = Block::default()
         .title(" alerts ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray));
+        .border_style(pal.border_style());
 
     if alerts.is_empty() {
         let ok = Paragraph::new(Span::styled(
             "all windows below threshold",
-            Style::default().fg(Color::Green),
+            Style::default().fg(pal.ok),
         ))
         .block(block);
         frame.render_widget(ok, area);
@@ -473,11 +491,11 @@ fn draw_alerts(
             .iter()
             .map(|alert| {
                 let style = if alert.starts_with("danger") {
-                    Style::default().fg(Color::Red)
+                    Style::default().fg(pal.danger)
                 } else if alert.starts_with("warning") {
-                    Style::default().fg(Color::Yellow)
+                    Style::default().fg(pal.warning)
                 } else {
-                    Style::default()
+                    pal.muted_style()
                 };
                 Line::from(Span::styled(alert.clone(), style))
             })
@@ -487,34 +505,33 @@ fn draw_alerts(
     }
 }
 
-fn draw_footer(frame: &mut ratatui::Frame, area: Rect, interval_secs: u64, next_refresh_secs: u64) {
+fn draw_footer(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    interval_secs: u64,
+    next_refresh_secs: u64,
+    pal: &Palette,
+) {
     let height = area.height;
     let footer = if height <= 1 {
-        Paragraph::new(Line::from(vec![Span::raw(format!(
-            "q quit | r refresh | {interval_secs}s/{next_refresh_secs}s"
-        ))]))
+        Paragraph::new(Line::from(vec![Span::styled(
+            format!("q quit | r refresh | {interval_secs}s/{next_refresh_secs}s"),
+            pal.muted_style(),
+        )]))
     } else {
         Paragraph::new(Line::from(vec![
-            Span::styled(
-                " q ",
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(" q ", pal.key_binding_style()),
             Span::raw("quit  "),
-            Span::styled(
-                " r ",
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(" r ", pal.key_binding_style()),
             Span::raw(format!(
                 "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
             )),
         ]))
-        .block(Block::default().borders(Borders::ALL))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(pal.border_style()),
+        )
     };
     frame.render_widget(footer, area);
 }
@@ -1017,6 +1034,35 @@ mod tests {
         width: u16,
         height: u16,
     ) -> String {
+        render_tui_to_string_themed(
+            snapshot,
+            error,
+            interval_secs,
+            next_refresh_secs,
+            with_abtop,
+            warning_threshold,
+            window_history,
+            preset,
+            Theme::Btop,
+            width,
+            height,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_tui_to_string_themed(
+        snapshot: Option<&StatusSnapshot>,
+        error: Option<&str>,
+        interval_secs: u64,
+        next_refresh_secs: u64,
+        with_abtop: bool,
+        warning_threshold: f64,
+        window_history: &HashMap<&str, WindowHistory>,
+        preset: Preset,
+        theme: Theme,
+        width: u16,
+        height: u16,
+    ) -> String {
         use ratatui::backend::TestBackend;
         let backend = TestBackend::new(width, height);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -1032,6 +1078,7 @@ mod tests {
                     warning_threshold,
                     window_history,
                     preset,
+                    theme,
                 );
             })
             .unwrap();
@@ -1172,6 +1219,58 @@ mod tests {
             Preset::Full,
             100,
             30,
+        );
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn tui_snapshot_dracula_theme() {
+        let snapshot = test_snapshot();
+        let mut history = HashMap::new();
+        history.insert("5h", {
+            let mut h = WindowHistory::new();
+            h.record(78.0);
+            h
+        });
+
+        let output = render_tui_to_string_themed(
+            Some(&snapshot),
+            None,
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Full,
+            Theme::Dracula,
+            120,
+            40,
+        );
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn tui_snapshot_high_contrast_theme() {
+        let snapshot = test_snapshot();
+        let mut history = HashMap::new();
+        history.insert("5h", {
+            let mut h = WindowHistory::new();
+            h.record(78.0);
+            h
+        });
+
+        let output = render_tui_to_string_themed(
+            Some(&snapshot),
+            None,
+            5,
+            3,
+            true,
+            75.0,
+            &history,
+            Preset::Full,
+            Theme::HighContrast,
+            120,
+            40,
         );
         insta::assert_snapshot!(output);
     }
