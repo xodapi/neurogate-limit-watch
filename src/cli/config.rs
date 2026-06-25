@@ -40,7 +40,10 @@ impl Config {
 
         if !config_path.is_file() {
             if path.is_some() {
-                return Err(format!("config file not found: {}", config_path.display()));
+                return Err(format!(
+                    "config file not found: {}\n  hint: run `nglimit --init` to create one",
+                    config_path.display()
+                ));
             }
             return Ok(Config::default());
         }

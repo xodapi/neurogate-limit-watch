@@ -30,17 +30,42 @@ pub fn run_once(
     Ok(exit_code(&snapshot.windows, args.fail_on))
 }
 
+fn color_level(level: &str) -> String {
+    let code = match level {
+        "danger" => "31",
+        "warning" => "33",
+        _ => "32",
+    };
+    format!("\x1b[{code}m{level}\x1b[0m")
+}
+
+fn color_percent(percent: f64) -> String {
+    let code = if percent >= 90.0 {
+        "31"
+    } else if percent >= 75.0 {
+        "33"
+    } else {
+        "32"
+    };
+    format!("\x1b[{code}m{:.0}%\x1b[0m", percent)
+}
+
 pub fn print_human(windows: &[ng::WindowState], abtop: Option<&Value>) {
     println!("NeuroGate limits");
     if windows.is_empty() {
         println!("  usage rows not found in /v1/me response");
     }
     for window in windows {
+        let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref());
+        let peak_str = peak
+            .map(|p| format!(" peak {}", color_percent(p)))
+            .unwrap_or_default();
         println!(
-            "  {:<4} {:<7} reset {}",
+            "  {:<4} {} reset {}{}",
             window.key,
-            window.level,
-            ng::format_duration_opt(window.reset_in_seconds)
+            color_level(&window.level),
+            ng::format_duration_opt(window.reset_in_seconds),
+            peak_str,
         );
         if let Some(metric) = &window.credits {
             println!("       credits  {}", ng::format_metric(metric));

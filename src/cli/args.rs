@@ -47,6 +47,8 @@ pub struct Args {
     pub window_thresholds: HashMap<String, (f64, f64)>,
     pub account: Option<String>,
     pub list_accounts: bool,
+    pub doctor: bool,
+    pub init: bool,
     pub help: bool,
     pub version: bool,
     pub config: Option<PathBuf>,
@@ -75,6 +77,8 @@ where
         window_thresholds: HashMap::new(),
         account: None,
         list_accounts: false,
+        doctor: false,
+        init: false,
         help: false,
         version: false,
         config: None,
@@ -90,6 +94,8 @@ where
                 parsed.account = Some(next_value(&mut iter, "--account")?);
             }
             "--list-accounts" => parsed.list_accounts = true,
+            "--doctor" => parsed.doctor = true,
+            "--init" => parsed.init = true,
             "--demo" => parsed.demo = true,
             "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
@@ -151,7 +157,11 @@ where
                     }
                 };
             }
-            other => return Err(format!("unknown argument: {other}")),
+            other => {
+                return Err(format!(
+                    "unknown argument: {other}\n  hint: use --help to see available options"
+                ))
+            }
         }
     }
 
@@ -258,6 +268,8 @@ OPTIONS:
       --config <PATH>        Load config file (default: ~/.config/nglimit/config.toml)
       --account <NAME>       Use account profile from accounts.toml
       --list-accounts        List available account profiles
+      --doctor               Run system diagnostics
+      --init                 Interactive setup wizard
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
   -V, --version              Print version
@@ -319,7 +331,8 @@ mod tests {
     #[test]
     fn unknown_argument_is_rejected() {
         let error = parse_args(["--unknown".to_string()]).unwrap_err();
-        assert!(error.contains("unknown argument"));
+        assert!(error.contains("unknown argument:"));
+        assert!(error.contains("--help"));
     }
 
     #[test]

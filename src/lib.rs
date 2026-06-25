@@ -133,10 +133,23 @@ impl HttpClient {
 
         let status = response.status();
         if !status.is_success() {
-            return Err(format!(
-                "NeuroGate /v1/me returned HTTP {}",
-                status.as_u16()
-            ));
+            let code = status.as_u16();
+            let hint = match code {
+                401 => "check your NEUROGATE_API_KEY".to_string(),
+                403 => "your API key does not have access".to_string(),
+                404 => "check NEUROGATE_API_BASE".to_string(),
+                429 => "rate limited — try --watch with a longer interval".to_string(),
+                _ if code >= 500 => {
+                    "server error — try again later or check status.neurogate.space".to_string()
+                }
+                _ => String::new(),
+            };
+            let hint = if hint.is_empty() {
+                String::new()
+            } else {
+                format!("\n  hint: {hint}")
+            };
+            return Err(format!("NeuroGate /v1/me returned HTTP {code}{hint}"));
         }
 
         let value: Value = response

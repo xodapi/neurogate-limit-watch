@@ -18,6 +18,7 @@ fn main() {
     let code = match real_main() {
         Ok(code) => code,
         Err(message) => {
+            let message = enhance_error(&message);
             eprintln!("nglimit: {message}");
             2
         }
@@ -51,6 +52,30 @@ fn windows_console_process_count() -> u32 {
     unsafe { GetConsoleProcessList(processes.as_mut_ptr(), processes.len() as u32) }
 }
 
+fn enhance_error(msg: &str) -> String {
+    if msg.contains("cannot reach NeuroGate API") {
+        format!("{msg}\n  hint: check your internet connection, VPN, and NEUROGATE_API_BASE")
+    } else if msg.contains("cannot read env file") {
+        format!("{msg}\n  hint: create a .env file or use --demo")
+    } else if msg.contains("cannot read mock payload") {
+        format!("{msg}\n  hint: check the path passed to --mock")
+    } else if msg.contains("mock payload is invalid") {
+        format!("{msg}\n  hint: the --mock file must be a valid JSON object")
+    } else if msg.contains("cannot initialize HTTP client") {
+        format!(
+            "{}\n  hint: check your system's TLS/CA certificates or proxy settings",
+            msg
+        )
+    } else if msg.contains("NEUROGATE_API_KEY is required") {
+        format!(
+            "{}\n  hint: set NEUROGATE_API_KEY, use --demo, or run nglimit --init",
+            msg
+        )
+    } else {
+        msg.to_string()
+    }
+}
+
 fn real_main() -> Result<i32, String> {
     let cli_args = parse_args(env::args().skip(1))?;
     if cli_args.help {
@@ -76,6 +101,14 @@ fn real_main() -> Result<i32, String> {
             }
         }
         return Ok(0);
+    }
+
+    if cli_args.doctor {
+        return cli::doctor::run_doctor();
+    }
+
+    if cli_args.init {
+        return cli::init::run_init();
     }
 
     let mut merged = config.merge_with_defaults()?;
@@ -192,6 +225,8 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         },
         account: args.account,
         list_accounts: args.list_accounts,
+        doctor: args.doctor,
+        init: args.init,
         help: args.help,
         version: args.version,
         config: args.config,

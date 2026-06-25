@@ -2,6 +2,8 @@ pub mod accounts;
 pub mod args;
 pub mod config;
 pub mod constants;
+pub mod doctor;
+pub mod init;
 pub mod monitor;
 pub mod notify;
 pub mod output;

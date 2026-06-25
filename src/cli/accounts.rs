@@ -35,10 +35,19 @@ impl AccountsConfig {
     }
 
     pub fn resolve(&self, name: &str) -> Result<AccountConfig, String> {
-        self.accounts
-            .get(name)
-            .cloned()
-            .ok_or_else(|| format!("account '{name}' not found in accounts file"))
+        let names = self.list_names();
+        self.accounts.get(name).cloned().ok_or_else(|| {
+            if names.is_empty() {
+                format!(
+                    "account '{name}' not found (no accounts configured; create ~/.config/nglimit/accounts.toml)"
+                )
+            } else {
+                format!(
+                    "account '{name}' not found; available accounts: {}",
+                    names.join(", ")
+                )
+            }
+        })
     }
 
     pub fn list_names(&self) -> Vec<String> {

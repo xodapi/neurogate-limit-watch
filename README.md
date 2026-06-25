@@ -4,16 +4,26 @@
 
 [![CI](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml)
 
-Single-binary Rust CLI for safely checking NeuroGate quota usage in
-Codex/Droid/Claude/Cursor workflows.
+**nglimit** — single native binary to monitor NeuroGate quota in real time.
 
-`nglimit` polls NeuroGate `GET /v1/me`, summarizes credit/request usage for
-5-hour, 24-hour, 7-day, and 30-day windows, includes an abtop-style live
-terminal monitor, and can merge local
-`abtop --status-json` agent status. It is built as a native executable, so
-users do not need Python, pip, venv, Node, or API SDK dependencies.
+Polls `GET /v1/me`, summarizes credit/request windows (5h / 24h / 7d / 30d),
+renders a live TUI dashboard (or JSON / compact text), sends desktop
+notifications on threshold breach, and supports multiple NeuroGate accounts.
+
+No Python, Node, or SDK dependencies — just one executable.
 
 ![demo](assets/demo.svg)
+
+## Quick Start
+
+```bash
+# Download from releases, then:
+nglimit --demo                # try without an API key
+nglimit --demo --monitor      # full-screen dashboard
+nglimit --init                # interactive setup wizard
+nglimit                       # real NeuroGate limits
+nglimit --doctor              # system diagnostics
+```
 
 ## Why
 
@@ -22,15 +32,22 @@ session running or whether they are about to hit NeuroGate limits. The tool is
 small, local-first, and intentionally avoids storing API keys or logging
 private prompts.
 
-## NeuroGate Referral Bonus
+## Features
 
-Optional: new NeuroGate users can register with this referral link and receive
-`$5` on their account:
-
-https://portal.neurogate.space/invite?ref=cbvBMDP06DSwPL9u
-
-The referral link is not required to use this project. The CLI does not send
-referral data anywhere.
+- **Multiple output modes**: human, JSON (`--json`), compact one-line (`--compact`)
+- **Live TUI monitor** (`--monitor`): ratatui dashboard with gauges, sparklines, color themes
+- **Monitor presets**: `full` (2-column grid), `compact` (single-column), `mini` (one-liner)
+- **12 color themes**: btop, dracula, catppuccin, tokyo-night, gruvbox, nord, high-contrast, protanopia, deuteranopia, tritanopia, solarized, monokai
+- **Multi-account**: `accounts.toml` profiles, Tab switching in TUI, dropdown in GUI
+- **Desktop notifications** (`--notify`): alert on warning/danger, no-repeat logic
+- **Custom thresholds** (`--warning`, `--danger`, `--threshold`): per-window warning/danger levels
+- **CI integration** (`--fail-on`): exit non-zero when threshold is breached
+- **Watch mode** (`--watch N`): periodic polling every N seconds
+- **abtop integration** (`--with-abtop`): merge local Codex/Claude agent status
+- **Diagnostics** (`--doctor`): validate config, accounts, env, API connectivity
+- **Setup wizard** (`--init`): interactive config, .env, and API key setup
+- **GUI** (`--features gui`): Slint-based desktop window (optional)
+- **Safe by design**: API key from env only, never logged, no telemetry
 
 ## Download
 
@@ -122,6 +139,42 @@ Binary location:
 
 - Windows: `target/release/nglimit.exe`
 - Linux/macOS: `target/release/nglimit`
+
+## Diagnostics
+
+Check system health:
+
+```bash
+nglimit --doctor
+```
+
+Example output:
+
+```
+nglimit doctor — system diagnostics
+
+  [✓] config.toml found: /home/user/.config/nglimit/config.toml
+  [✓] config.toml is valid TOML
+  [✓] accounts.toml: 2 account(s): dev, prod
+
+  environment:
+       HOME: /home/user
+       NEUROGATE_API_BASE: (not set, will use default)
+       NEUROGATE_API_KEY: (set)
+
+  testing API connection to https://api.neurogate.space... OK (4 window(s))
+
+  status: all checks passed
+```
+
+## Interactive Setup
+
+```bash
+nglimit --init
+```
+
+Creates config directory, config.toml with defaults, optionally sets up
+`.env` with your API key, and tests the connection.
 
 ## Usage
 
@@ -310,15 +363,20 @@ cargo run --locked -- --demo --json
 - Native Rust CLI and GUI (build with `--features gui`).
 - NeuroGate `/v1/me` polling with robust schema tolerance.
 - 5h / 24h / 7d / 30d credit and request windows.
-- Human, JSON, and compact output modes.
+- Human, JSON, and compact output modes with ANSI color coding.
 - Full-screen ratatui monitor with gauges, sparklines, color coding.
 - Monitor presets: `full`, `compact`, `mini` for different terminal sizes.
+- 12 color themes including accessibility-optimized (protanopia, deuteranopia, tritanopia, high-contrast).
 - Per-window thresholds: `--threshold 5h=80:95,7d=90`.
 - `.env` file next to the binary or working directory.
 - Custom warning/danger thresholds.
 - Desktop notifications with escalation tracking.
+- Multi-account support via `accounts.toml` (Tab switching in TUI, dropdown in GUI).
 - Demo/mock mode without a key.
 - Optional local abtop integration.
+- `--doctor` system diagnostics.
+- `--init` interactive setup wizard.
+- Actionable error messages with suggestions.
 - CI and release workflow for native binaries (Windows, Linux, macOS, ARM).
 - PowerShell install/uninstall scripts.
 - Termux/Android install guide.

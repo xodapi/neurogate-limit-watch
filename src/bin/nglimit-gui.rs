@@ -209,8 +209,17 @@ fn apply_dashboard(app: &AppWindow, result: Result<ng::Dashboard, String>) {
             );
         }
         Err(error) => {
-            app.set_status_text(format!("Ошибка: {error}").into());
-            app.set_source_text("источник: NeuroGate недоступен".into());
+            let msg = if error.contains("NeuroGate /v1/me returned HTTP 401") {
+                "Check your NEUROGATE_API_KEY in .env"
+            } else if error.contains("cannot reach NeuroGate API") {
+                "Check network / NEUROGATE_API_BASE"
+            } else if error.contains("NEUROGATE_API_KEY is required") {
+                "Set NEUROGATE_API_KEY or use Demo"
+            } else {
+                &error
+            };
+            app.set_status_text(msg.into());
+            app.set_source_text(format!("error: {error}").into());
         }
     }
 }
@@ -286,6 +295,13 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     }
 }
 
+fn gui_load_dotenv() -> Result<HashMap<String, String>, String> {
+    ng::load_dotenv_custom(None).or_else(|error| {
+        eprintln!("nglimit-gui: {error}");
+        Ok(HashMap::new())
+    })
+}
+
 fn load_dashboard(
     force_demo: bool,
     http: &ng::HttpClient,
@@ -293,7 +309,7 @@ fn load_dashboard(
     warning: f64,
     danger: f64,
 ) -> Result<ng::Dashboard, String> {
-    let dotenv = ng::load_dotenv_custom(None)?;
+    let dotenv = gui_load_dotenv()?;
     let config = runtime_config(&dotenv, account);
     let (payload, source) = if force_demo {
         (
