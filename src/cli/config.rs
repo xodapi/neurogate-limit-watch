@@ -146,7 +146,7 @@ fn default_config_path() -> Option<PathBuf> {
     }
 }
 
-fn dirs_or_default() -> Option<PathBuf> {
+pub(crate) fn dirs_or_default() -> Option<PathBuf> {
     if cfg!(windows) {
         std::env::var("APPDATA")
             .ok()

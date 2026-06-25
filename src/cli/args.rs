@@ -45,6 +45,8 @@ pub struct Args {
     pub warning_threshold: f64,
     pub danger_threshold: f64,
     pub window_thresholds: HashMap<String, (f64, f64)>,
+    pub account: Option<String>,
+    pub list_accounts: bool,
     pub help: bool,
     pub version: bool,
     pub config: Option<PathBuf>,
@@ -71,6 +73,8 @@ where
         warning_threshold: constants::DEFAULT_WARNING_THRESHOLD,
         danger_threshold: constants::DEFAULT_DANGER_THRESHOLD,
         window_thresholds: HashMap::new(),
+        account: None,
+        list_accounts: false,
         help: false,
         version: false,
         config: None,
@@ -82,6 +86,10 @@ where
             "-h" | "--help" => parsed.help = true,
             "-V" | "--version" => parsed.version = true,
             "--config" => parsed.config = Some(PathBuf::from(next_value(&mut iter, "--config")?)),
+            "--account" => {
+                parsed.account = Some(next_value(&mut iter, "--account")?);
+            }
+            "--list-accounts" => parsed.list_accounts = true,
             "--demo" => parsed.demo = true,
             "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
@@ -248,6 +256,8 @@ OPTIONS:
                              Format: KEY=WARNING[:DANGER] where KEY is 5h,24h,7d,30d
       --env-file <PATH>      Load .env file explicitly
       --config <PATH>        Load config file (default: ~/.config/nglimit/config.toml)
+      --account <NAME>       Use account profile from accounts.toml
+      --list-accounts        List available account profiles
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
   -V, --version              Print version

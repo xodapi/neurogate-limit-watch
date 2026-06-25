@@ -7,8 +7,9 @@ use std::time::Duration;
 
 use neurogate_limit_watch::{self as ng, VERSION};
 
+use cli::accounts::AccountsConfig;
 use cli::args::{parse_args, Args, FailOn};
-use cli::config::Config;
+use cli::config::{Config, MergedConfig};
 use cli::monitor::run_monitor;
 use cli::notify::Notifier;
 use cli::output::run_once;
@@ -62,7 +63,33 @@ fn real_main() -> Result<i32, String> {
     }
 
     let config = Config::load(cli_args.config.as_ref())?;
-    let args = merge_args_with_config(cli_args, &config)?;
+    let accounts = AccountsConfig::load()?;
+
+    if cli_args.list_accounts {
+        let names = accounts.list_names();
+        if names.is_empty() {
+            println!("no accounts configured (create ~/.config/nglimit/accounts.toml)");
+        } else {
+            println!("available accounts:");
+            for name in &names {
+                println!("  {name}");
+            }
+        }
+        return Ok(0);
+    }
+
+    let mut merged = config.merge_with_defaults()?;
+    if let Some(ref account_name) = cli_args.account {
+        let account = accounts.resolve(account_name)?;
+        if let Some(api_key_env) = account.api_key_env {
+            merged.api_key_env = api_key_env;
+        }
+        if let Some(api_base) = account.api_base {
+            merged.api_base = Some(api_base);
+        }
+    }
+
+    let args = merge_args_with_config(cli_args, &merged);
 
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
@@ -83,19 +110,17 @@ fn real_main() -> Result<i32, String> {
     }
 }
 
-fn merge_args_with_config(args: Args, config: &Config) -> Result<Args, String> {
-    let merged = config.merge_with_defaults()?;
-
-    Ok(Args {
-        api_base: args.api_base.or(merged.api_base),
+fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
+    Args {
+        api_base: args.api_base.or_else(|| merged.api_base.clone()),
         api_key_env: if args.api_key_env == cli::constants::DEFAULT_API_KEY_ENV {
-            merged.api_key_env
+            merged.api_key_env.clone()
         } else {
             args.api_key_env
         },
-        env_file: args.env_file.or(merged.env_file),
+        env_file: args.env_file.or_else(|| merged.env_file.clone()),
         demo: args.demo || merged.demo,
-        mock: args.mock.or(merged.mock),
+        mock: args.mock.or_else(|| merged.mock.clone()),
         output: args.output,
         monitor: args.monitor || merged.monitor,
         preset: if args.preset == cli::args::Preset::Full
@@ -145,14 +170,16 @@ fn merge_args_with_config(args: Args, config: &Config) -> Result<Args, String> {
         window_thresholds: if args.window_thresholds.is_empty()
             && !merged.window_thresholds.is_empty()
         {
-            merged.window_thresholds
+            merged.window_thresholds.clone()
         } else {
             args.window_thresholds
         },
+        account: args.account,
+        list_accounts: args.list_accounts,
         help: args.help,
         version: args.version,
         config: args.config,
-    })
+    }
 }
 
 fn load_config(args: &cli::args::Args) -> Result<ng::RuntimeConfig, String> {

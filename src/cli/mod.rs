@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod args;
 pub mod config;
 pub mod constants;
