@@ -1,4 +1,4 @@
-import { Button } from "std-widgets.slint";
+import { Button, ComboBox } from "std-widgets.slint";
 
 component MeterBar inherits Rectangle {
     in property <float> value;
@@ -211,6 +211,10 @@ export component AppWindow inherits Window {
     callback refresh-requested();
     callback demo-requested();
     callback settings-changed(float, float);
+    callback account-changed(string);
+
+    in-out property <[string]> account-names: [];
+    in-out property <string> current-account: "";
 
     in property <string> status-text: "Запуск...";
     in property <string> source-text: "источник: загрузка";
@@ -441,6 +445,57 @@ export component AppWindow inherits Window {
                                     root.risk-only = !root.risk-only;
                                 }
                             }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: #2c3549;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 20px;
+
+                        VerticalLayout {
+                            width: 220px;
+                            spacing: 4px;
+
+                            Text {
+                                text: "Пороги";
+                                color: #e6edf5;
+                                font-size: 14px;
+                                font-weight: 800;
+                            }
+
+                            Text {
+                                text: "warning: \{round(root.warning-threshold)}% | danger: \{round(root.danger-threshold)}%";
+                                color: #8f9aaa;
+                                font-size: 11px;
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+                            visible: root.account-names.length > 0;
+
+                            Text {
+                                text: "account";
+                                color: #caa45f;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+
+                            ComboBox {
+                                model: root.account-names;
+                                current-value: root.current-account;
+                                selected(value) => {
+                                    root.current-account = value;
+                                    root.account-changed(value);
+                                }
+                            }
+
+                            Rectangle { }
                         }
                     }
 
