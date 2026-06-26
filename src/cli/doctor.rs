@@ -62,15 +62,37 @@ pub fn run_doctor() -> Result<i32, String> {
         Ok(h) => println!("       HOME: {h}"),
         Err(_) => println!("       HOME: (not set)"),
     }
-    let api_base = std::env::var("NEUROGATE_API_BASE");
+    let api_base = std::env::var("VIBEMODE_API_BASE")
+        .or_else(|_| std::env::var("VIBEMOD_API_BASE"))
+        .or_else(|_| std::env::var("NEUROGATE_API_BASE"));
     match &api_base {
-        Ok(v) => println!("       NEUROGATE_API_BASE: {v}"),
-        Err(_) => println!("       NEUROGATE_API_BASE: (not set, will use default)"),
+        Ok(v) => {
+            let var_name = if std::env::var("VIBEMODE_API_BASE").is_ok() {
+                "VIBEMODE_API_BASE"
+            } else if std::env::var("VIBEMOD_API_BASE").is_ok() {
+                "VIBEMOD_API_BASE"
+            } else {
+                "NEUROGATE_API_BASE"
+            };
+            println!("       {var_name}: {v}");
+        }
+        Err(_) => println!("       VIBEMODE_API_BASE: (not set, will use default)"),
     }
-    let api_key = std::env::var("NEUROGATE_API_KEY");
+    let api_key = std::env::var("VIBEMODE_API_KEY")
+        .or_else(|_| std::env::var("VIBEMOD_API_KEY"))
+        .or_else(|_| std::env::var("NEUROGATE_API_KEY"));
     match &api_key {
-        Ok(_) => println!("       NEUROGATE_API_KEY: (set)"),
-        Err(_) => println!("       NEUROGATE_API_KEY: (not set, demo data only)"),
+        Ok(_) => {
+            let var_name = if std::env::var("VIBEMODE_API_KEY").is_ok() {
+                "VIBEMODE_API_KEY"
+            } else if std::env::var("VIBEMOD_API_KEY").is_ok() {
+                "VIBEMOD_API_KEY"
+            } else {
+                "NEUROGATE_API_KEY"
+            };
+            println!("       {var_name}: (set)");
+        }
+        Err(_) => println!("       VIBEMODE_API_KEY: (not set, demo data only)"),
     }
 
     // API connectivity
@@ -88,13 +110,13 @@ pub fn run_doctor() -> Result<i32, String> {
             Err(e) => {
                 println!("FAILED");
                 println!("       error: {e}");
-                println!("       hint: check NEUROGATE_API_KEY and network");
+                println!("       hint: check VIBEMODE_API_KEY and network");
                 ok = false;
             }
         }
     } else {
         println!("  API connectivity: skipped (no API key)");
-        println!("       hint: set NEUROGATE_API_KEY or use --demo");
+        println!("       hint: set VIBEMODE_API_KEY or use --demo");
     }
 
     // Summary

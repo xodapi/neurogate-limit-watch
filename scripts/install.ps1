@@ -32,9 +32,9 @@ if ($BuildFromSource) {
         Write-Host "Error: cargo not found. Install Rust from https://rustup.rs" -ForegroundColor Red
         exit 1
     }
-    $repoDir = Join-Path $env:TEMP "neurogate-limit-watch"
+    $repoDir = Join-Path $env:TEMP "vimit"
     if (Test-Path $repoDir) { Remove-Item -Recurse -Force $repoDir }
-    git clone https://github.com/xodapi/neurogate-limit-watch.git $repoDir
+    git clone https://github.com/xodapi/vimit.git $repoDir
     Push-Location $repoDir
     cargo build --release
     Copy-Item "target\release\vimit.exe" $BinDir
@@ -42,7 +42,7 @@ if ($BuildFromSource) {
     Remove-Item -Recurse -Force $repoDir
 } else {
     Write-Host "Downloading latest release..." -ForegroundColor Yellow
-    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/xodapi/neurogate-limit-watch/releases/latest"
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/xodapi/vimit/releases/latest"
     $asset = $release.assets | Where-Object { $_.name -like "*windows*x86_64*" -or $_.name -like "*windows*msvc*" } | Select-Object -First 1
     if (-not $asset) {
         Write-Host "No Windows binary found in latest release. Trying --BuildFromSource..." -ForegroundColor Yellow
@@ -70,12 +70,12 @@ if (-not (Test-Path $EnvFile)) {
     if (-not (Test-Path $envDir)) { New-Item -ItemType Directory -Path $envDir -Force | Out-Null }
     @"
 # vimit configuration
-# Get your API key from NeuroGate dashboard
-NEUROGATE_API_KEY=
-NEUROGATE_API_BASE=https://api.vibemod.pro
+# Get your API key from VibeMode dashboard
+VIBEMODE_API_KEY=
+VIBEMODE_API_BASE=https://r-api.vibemod.pro
 "@ | Set-Content $EnvFile
     Write-Host "Created default config at $EnvFile" -ForegroundColor Green
-    Write-Host "  Edit it and add your NEUROGATE_API_KEY" -ForegroundColor Yellow
+    Write-Host "  Edit it and add your VIBEMODE_API_KEY" -ForegroundColor Yellow
 }
 
 # Verify

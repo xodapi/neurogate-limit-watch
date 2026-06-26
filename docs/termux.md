@@ -10,8 +10,8 @@ pkg install rust binutils
 cargo install --path .
 
 # Or build from source
-git clone https://github.com/xodapi/neurogate-limit-watch.git
-cd neurogate-limit-watch
+git clone https://github.com/xodapi/vimit.git
+cd vimit
 cargo build --release
 cp target/release/vimit ~/.local/bin/
 ```
@@ -21,8 +21,8 @@ cp target/release/vimit ~/.local/bin/
 ```bash
 mkdir -p ~/.config/vimit
 cat > ~/.config/vimit/.env << 'EOF'
-NEUROGATE_API_KEY=your_key_here
-NEUROGATE_API_BASE=https://api.vibemod.pro
+VIBEMODE_API_KEY=your_key_here
+VIBEMODE_API_BASE=https://r-api.vibemod.pro
 EOF
 ```
 

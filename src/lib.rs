@@ -961,10 +961,23 @@ fn summed_agent_token_rate(parsed: &Value) -> Option<f64> {
 // ── .env ────────────────────────────────────────────────────────────────────
 
 pub fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<String> {
-    env::var(key)
-        .ok()
-        .filter(|value| !value.is_empty())
-        .or_else(|| dotenv.get(key).cloned().filter(|value| !value.is_empty()))
+    let keys = if key == "NEUROGATE_API_KEY" || key == "VIBEMODE_API_KEY" || key == "VIBEMOD_API_KEY" {
+        vec!["VIBEMODE_API_KEY", "VIBEMOD_API_KEY", "NEUROGATE_API_KEY"]
+    } else if key == "NEUROGATE_API_BASE" || key == "VIBEMODE_API_BASE" || key == "VIBEMOD_API_BASE" {
+        vec!["VIBEMODE_API_BASE", "VIBEMOD_API_BASE", "NEUROGATE_API_BASE"]
+    } else {
+        vec![key]
+    };
+
+    for k in keys {
+        if let Some(val) = env::var(k).ok().filter(|v| !v.is_empty()) {
+            return Some(val);
+        }
+        if let Some(val) = dotenv.get(k).cloned().filter(|v| !v.is_empty()) {
+            return Some(val);
+        }
+    }
+    None
 }
 
 pub fn find_dotenv_custom(explicit: Option<&PathBuf>) -> Option<PathBuf> {

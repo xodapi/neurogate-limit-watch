@@ -98,7 +98,7 @@ impl Config {
             api_base: self
                 .api_base
                 .clone()
-                .or_else(|| std::env::var("NEUROGATE_API_BASE").ok()),
+                .or_else(|| std::env::var("VIBEMODE_API_BASE").ok().or_else(|| std::env::var("VIBEMOD_API_BASE").ok()).or_else(|| std::env::var("NEUROGATE_API_BASE").ok())),
             api_key_env: self
                 .api_key_env
                 .clone()

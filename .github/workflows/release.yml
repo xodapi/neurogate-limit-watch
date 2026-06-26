@@ -20,19 +20,25 @@ jobs:
             asset: x86_64-unknown-linux-gnu
             archive: tar.gz
             binary: vimit
+            features: ""
           - os: ubuntu-latest
             asset: aarch64-unknown-linux-gnu
             archive: tar.gz
             binary: vimit
             cross: true
+            features: ""
           - os: windows-latest
             asset: x86_64-pc-windows-msvc
             archive: zip
             binary: vimit.exe
+            features: "--features gui"
+            gui_binary: vimit-gui.exe
           - os: macos-latest
             asset: aarch64-apple-darwin
             archive: tar.gz
             binary: vimit
+            features: "--features gui"
+            gui_binary: vimit-gui
 
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +52,7 @@ jobs:
         if: matrix.cross
         run: rustup target add aarch64-unknown-linux-gnu
       - name: Build release binary
-        run: cargo build --release --locked ${{ matrix.cross && '--target aarch64-unknown-linux-gnu' || '' }}
+        run: cargo build --release ${{ matrix.features }} --locked ${{ matrix.cross && '--target aarch64-unknown-linux-gnu' || '' }}
       - name: Package Unix binary
         if: runner.os != 'Windows'
         shell: bash
@@ -58,6 +64,9 @@ jobs:
             cp "target/aarch64-unknown-linux-gnu/release/${{ matrix.binary }}" "dist/${name}/"
           else
             cp "target/release/${{ matrix.binary }}" "dist/${name}/"
+            if [ -n "${{ matrix.gui_binary }}" ]; then
+              cp "target/release/${{ matrix.gui_binary }}" "dist/${name}/"
+            fi
           fi
           cp README.md README.ru.md LICENSE .env.example "dist/${name}/"
           tar -czf "dist/${name}.tar.gz" -C dist "${name}"
@@ -69,6 +78,9 @@ jobs:
           $name = "vimit-${env:GITHUB_REF_NAME}-${{ matrix.asset }}"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
+          if ("${{ matrix.gui_binary }}" -ne "") {
+              Copy-Item "target/release/${{ matrix.gui_binary }}" "dist/$name/"
+          }
           Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/$name/"
           Copy-Item packaging/windows/*.cmd "dist/$name/"
           Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force

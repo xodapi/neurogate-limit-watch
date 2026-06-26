@@ -33,7 +33,7 @@ pub fn run_init() -> Result<i32, String> {
         );
     } else {
         let default_config = r#"# vimit configuration
-# See https://github.com/xodapi/neurogate-limit-watch for docs
+# See https://github.com/xodapi/vimit for docs
 
 # Default thresholds
 # warning = 75
@@ -63,7 +63,7 @@ pub fn run_init() -> Result<i32, String> {
     if env_file.is_file() {
         println!("  .env: {} (exists, skipping)", env_file.display());
     } else {
-        print!("\n  ? create .env with NEUROGATE_API_KEY? [y/N] ");
+        print!("\n  ? create .env with VIBEMODE_API_KEY? [y/N] ");
         io::stdout().flush().unwrap();
         let mut answer = String::new();
         io::stdin().read_line(&mut answer).unwrap();
@@ -76,11 +76,11 @@ pub fn run_init() -> Result<i32, String> {
             let key = key.trim().to_string();
             if !key.is_empty() {
                 let env_content = format!(
-                    "NEUROGATE_API_KEY={key}\n# NEUROGATE_API_BASE=https://r-api.vibemod.pro\n"
+                    "VIBEMODE_API_KEY={key}\n# VIBEMODE_API_BASE=https://r-api.vibemod.pro\n"
                 );
                 std::fs::write(&env_file, env_content)
                     .map_err(|e| format!("cannot write .env: {e}"))?;
-                println!("  .env created with NEUROGATE_API_KEY");
+                println!("  .env created with VIBEMODE_API_KEY");
                 println!("  hint: you can also set the env var directly or use --api-key-env");
             } else {
                 println!("  skipping — empty key");
@@ -107,12 +107,12 @@ pub fn run_init() -> Result<i32, String> {
 
 fn test_connection() -> Result<(), String> {
     let dotenv = vimit::load_dotenv_custom(None).unwrap_or_default();
-    let api_key = vimit::config_value("NEUROGATE_API_KEY", &dotenv).unwrap_or_default();
+    let api_key = vimit::config_value("VIBEMODE_API_KEY", &dotenv).unwrap_or_default();
     if api_key.is_empty() {
         println!("  skipping connection test: no API key found");
         return Ok(());
     }
-    let api_base = vimit::config_value("NEUROGATE_API_BASE", &dotenv)
+    let api_base = vimit::config_value("VIBEMODE_API_BASE", &dotenv)
         .unwrap_or_else(|| vimit::DEFAULT_API_BASE.to_string());
     print!("  testing {api_base}... ");
     io::stdout().flush().unwrap();

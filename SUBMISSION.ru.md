@@ -18,13 +18,13 @@ Cursor или другие OpenAI-compatible клиенты и хотят зар
 упереться в лимиты.
 
 GitHub:
-https://github.com/xodapi/neurogate-limit-watch
+https://github.com/xodapi/vimit
 
 Релизы:
-https://github.com/xodapi/neurogate-limit-watch/releases
+https://github.com/xodapi/vimit/releases
 
 Обсуждения и идеи:
-https://github.com/xodapi/neurogate-limit-watch/discussions
+https://github.com/xodapi/vimit/discussions
 
 Бонус для новых пользователей VibeMode:
 Регистрация по ссылке дает новому пользователю $5 на счет:
@@ -51,8 +51,8 @@ Windows:
 Из исходников:
 
 ```bash
-git clone https://github.com/xodapi/neurogate-limit-watch.git
-cd neurogate-limit-watch
+git clone https://github.com/xodapi/vimit.git
+cd vimit
 cargo build --release --locked
 target/release/vimit --demo
 ```
@@ -62,7 +62,7 @@ target/release/vimit --demo
 ```bash
 cp .env.example .env
 # затем вписать ключ в .env:
-# NEUROGATE_API_KEY=ваш_ключ
+# VIBEMODE_API_KEY=ваш_ключ
 vimit
 vimit --json
 vimit --compact
