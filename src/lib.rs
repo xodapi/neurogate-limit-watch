@@ -729,16 +729,21 @@ pub fn summary_to_json_with_stale(
     windows: &[WindowState],
     abtop: Option<&Value>,
     stale: bool,
+    latency_ms: u64,
 ) -> Value {
     let mut obj = json!({
         "source": "vibemode",
         "windows": windows.iter().map(window_to_json).collect::<Vec<_>>(),
         "abtop": abtop.cloned().unwrap_or(Value::Null),
     });
-    if stale {
-        if let Some(map) = obj.as_object_mut() {
+    if let Some(map) = obj.as_object_mut() {
+        if stale {
             map.insert("stale".to_string(), Value::Bool(true));
         }
+        map.insert(
+            "latency_ms".to_string(),
+            Value::Number(serde_json::Number::from(latency_ms)),
+        );
     }
     obj
 }

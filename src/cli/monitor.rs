@@ -68,6 +68,7 @@ pub struct StatusSnapshot {
     pub abtop: Option<Value>,
     pub fetched_at: chrono::DateTime<chrono::Utc>,
     pub stale: bool,
+    pub latency_ms: u64,
 }
 
 pub fn collect_status(
@@ -76,18 +77,20 @@ pub fn collect_status(
     http: &ng::HttpClient,
     cache: Option<&CacheStore>,
 ) -> Result<StatusSnapshot, String> {
-    let fetch_result: Result<(serde_json::Value, bool), String> = if args.demo {
-        Ok((ng::demo_payload(), false))
+    let fetch_result: Result<(serde_json::Value, u64), String> = if args.demo {
+        Ok((ng::demo_payload(), 0))
     } else if let Some(path) = &args.mock {
-        ng::load_mock(path).map(|v| (v, false))
+        ng::load_mock(path).map(|v| (v, 0))
     } else {
+        let start = Instant::now();
         let fetch = http.fetch_me_with_retry(&config.api_key, &config.api_base);
+        let elapsed = start.elapsed().as_millis() as u64;
         match fetch {
             Ok(payload) => {
                 if let Some(store) = cache {
                     let _ = store.set(&config.api_key, &config.api_base, &payload);
                 }
-                Ok((payload, false))
+                Ok((payload, elapsed))
             }
             Err(error) => {
                 if !args.no_cache {
@@ -96,6 +99,7 @@ pub fn collect_status(
                         {
                             return Ok(StatusSnapshot {
                                 stale: true,
+                                latency_ms: elapsed,
                                 ..snapshot_from_payload(args, config, cached)
                             });
                         }
@@ -106,9 +110,10 @@ pub fn collect_status(
         }
     };
 
-    let (payload, _stale) = fetch_result?;
+    let (payload, latency_ms) = fetch_result?;
     Ok(StatusSnapshot {
         stale: false,
+        latency_ms,
         ..snapshot_from_payload(args, config, payload)
     })
 }
@@ -134,6 +139,7 @@ fn snapshot_from_payload(
         abtop,
         fetched_at: chrono::Utc::now(),
         stale: false,
+        latency_ms: 0,
     }
 }
 
@@ -401,8 +407,13 @@ fn draw_header(
                 "OK"
             };
             let stale_tag = if s.stale { " STALE" } else { "" };
+            let latency_tag = if s.latency_ms > 0 {
+                format!(" {}ms", s.latency_ms)
+            } else {
+                String::new()
+            };
             (
-                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag} | {label} | peak {peak} "),
+                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag} | {label} | peak {peak} "),
                 pal.bold_level_style(level),
             )
         }
@@ -1402,6 +1413,7 @@ mod tests {
                 }]
             })),
             fetched_at: chrono::Utc.timestamp_opt(0, 0).single().unwrap(),
+            latency_ms: 0,
         }
     }
 

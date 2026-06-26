@@ -18,8 +18,12 @@ pub fn run_once(
     if let Some(store) = trends {
         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
     }
-    let status =
-        ng::summary_to_json_with_stale(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.stale);
+    let status = ng::summary_to_json_with_stale(
+        &snapshot.windows,
+        snapshot.abtop.as_ref(),
+        snapshot.stale,
+        snapshot.latency_ms,
+    );
 
     match args.output {
         OutputMode::Json => {
