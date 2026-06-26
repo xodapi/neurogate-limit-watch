@@ -3,6 +3,11 @@
 [English](README.md) | [Русский](README.ru.md)
 
 [![CI](https://github.com/xodapi/vimit/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/xodapi/vimit.svg?style=flat-square)](https://github.com/xodapi/vimit/stargazers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-2021-orange.svg?style=flat-square)](https://www.rust-lang.org)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](https://github.com/xodapi/vimit)
+[![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
 **vimit** — single native binary to monitor VibeMode quota in real time.
 
