@@ -277,7 +277,7 @@ export component AppWindow inherits Window {
             spacing: 12px;
 
             Rectangle {
-                height: 190px;
+                min-height: 245px;
                 background: #151a22;
                 border-radius: 10px;
                 border-color: #2b3444;
@@ -461,14 +461,14 @@ export component AppWindow inherits Window {
                             spacing: 4px;
 
                             Text {
-                                text: "Пороги";
+                                text: "Аккаунт";
                                 color: #e6edf5;
                                 font-size: 14px;
                                 font-weight: 800;
                             }
 
                             Text {
-                                text: "warning: \{round(root.warning-threshold)}% | danger: \{round(root.danger-threshold)}%";
+                                text: "выбор профиля для лимитов";
                                 color: #8f9aaa;
                                 font-size: 11px;
                             }

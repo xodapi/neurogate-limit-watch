@@ -210,11 +210,13 @@ fn apply_dashboard(app: &AppWindow, result: Result<ng::Dashboard, String>) {
         }
         Err(error) => {
             let msg = if error.contains("VibeMode /v1/me returned HTTP 401") {
-                "Check your NEUROGATE_API_KEY in .env"
+                "Check your VIBEMODE_API_KEY in .env"
             } else if error.contains("cannot reach VibeMode API") {
-                "Check network / NEUROGATE_API_BASE"
-            } else if error.contains("NEUROGATE_API_KEY is required") {
-                "Set NEUROGATE_API_KEY or use Demo"
+                "Check network / VIBEMODE_API_BASE"
+            } else if error.contains("VIBEMODE_API_KEY is required")
+                || error.contains("NEUROGATE_API_KEY is required")
+            {
+                "Set VIBEMODE_API_KEY or use Demo"
             } else {
                 &error
             };
@@ -319,7 +321,7 @@ fn load_dashboard(
     } else if config.api_key.is_empty() {
         (
             ng::demo_payload(),
-            "источник: демо; добавьте NEUROGATE_API_KEY в .env для live-лимитов".to_string(),
+            "источник: демо; добавьте VIBEMODE_API_KEY в .env для live-лимитов".to_string(),
         )
     } else {
         (
@@ -348,14 +350,14 @@ fn runtime_config(
     let acct = account.lock().unwrap();
     let (api_key_env, api_base_override) = match acct.as_ref() {
         Some(a) => (
-            a.api_key_env.as_deref().unwrap_or("NEUROGATE_API_KEY"),
+            a.api_key_env.as_deref().unwrap_or("VIBEMODE_API_KEY"),
             a.api_base.clone(),
         ),
-        None => ("NEUROGATE_API_KEY", None),
+        None => ("VIBEMODE_API_KEY", None),
     };
     ng::RuntimeConfig {
         api_base: api_base_override
-            .or_else(|| ng::config_value("NEUROGATE_API_BASE", dotenv))
+            .or_else(|| ng::config_value("VIBEMODE_API_BASE", dotenv))
             .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
         api_key: ng::config_value(api_key_env, dotenv).unwrap_or_default(),
         abtop_bin: ng::config_value("ABTOP_BIN", dotenv)

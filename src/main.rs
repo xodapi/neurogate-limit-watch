@@ -1,6 +1,7 @@
 mod cli;
 
 use std::env;
+#[cfg(windows)]
 use std::io::{self, Write};
 use std::thread;
 use std::time::Duration;
@@ -56,7 +57,7 @@ fn windows_console_process_count() -> u32 {
 
 fn enhance_error(msg: &str) -> String {
     if msg.contains("cannot reach VibeMode API") {
-        format!("{msg}\n  hint: check your internet connection, VPN, and NEUROGATE_API_BASE")
+        format!("{msg}\n  hint: check your internet connection, VPN, and VIBEMODE_API_BASE")
     } else if msg.contains("cannot read env file") {
         format!("{msg}\n  hint: create a .env file or use --demo")
     } else if msg.contains("cannot read mock payload") {
@@ -68,9 +69,11 @@ fn enhance_error(msg: &str) -> String {
             "{}\n  hint: check your system's TLS/CA certificates or proxy settings",
             msg
         )
-    } else if msg.contains("NEUROGATE_API_KEY is required") {
+    } else if msg.contains("VIBEMODE_API_KEY is required")
+        || msg.contains("NEUROGATE_API_KEY is required")
+    {
         format!(
-            "{}\n  hint: set NEUROGATE_API_KEY, use --demo, or run vimit --init",
+            "{}\n  hint: set VIBEMODE_API_KEY, use --demo, or run vimit --init",
             msg
         )
     } else {

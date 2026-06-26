@@ -292,8 +292,8 @@ OPTIONS:
       --init                 Interactive setup wizard
       --trend                Show 30-day usage trends (requires saved snapshots)
       --days <N>             Days of trend history to show [default: 30]
-      --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
-      --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
+      --api-base <URL>       API base URL [env: VIBEMODE_API_BASE]
+      --api-key-env <NAME>   API key environment variable [default: VIBEMODE_API_KEY]
       --vpn                  Switch to VPN endpoint (api.vibemod.pro)
   -V, --version              Print version
   -h, --help                 Print help

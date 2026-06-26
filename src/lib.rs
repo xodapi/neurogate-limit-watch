@@ -155,7 +155,7 @@ impl RuntimeConfig {
         let dotenv = load_dotenv_custom(env_file)?;
         Ok(Self {
             api_base: api_base_override
-                .or_else(|| config_value("NEUROGATE_API_BASE", &dotenv))
+                .or_else(|| config_value("VIBEMODE_API_BASE", &dotenv))
                 .unwrap_or_else(|| DEFAULT_API_BASE.to_string()),
             api_key: config_value(api_key_env, &dotenv).unwrap_or_default(),
             abtop_bin: config_value("ABTOP_BIN", &dotenv)
@@ -197,9 +197,7 @@ impl HttpClient {
 
     pub fn fetch_me(&self, api_key: &str, api_base: &str) -> Result<Value, String> {
         if api_key.is_empty() {
-            return Err(
-                "NEUROGATE_API_KEY is required unless --demo or --mock is used".to_string(),
-            );
+            return Err("VIBEMODE_API_KEY is required unless --demo or --mock is used".to_string());
         }
 
         let url = format!("{}/v1/me", api_base.trim_end_matches('/'));
@@ -215,9 +213,9 @@ impl HttpClient {
         if !status.is_success() {
             let code = status.as_u16();
             let hint = match code {
-                401 => "check your NEUROGATE_API_KEY".to_string(),
+                401 => "check your VIBEMODE_API_KEY".to_string(),
                 403 => "your API key does not have access".to_string(),
-                404 => "check NEUROGATE_API_BASE".to_string(),
+                404 => "check VIBEMODE_API_BASE".to_string(),
                 429 => "rate limited — try --watch with a longer interval".to_string(),
                 _ if code >= 500 => {
                     "server error — try again later or check status.vibemod.pro".to_string()
@@ -961,10 +959,18 @@ fn summed_agent_token_rate(parsed: &Value) -> Option<f64> {
 // ── .env ────────────────────────────────────────────────────────────────────
 
 pub fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<String> {
-    let keys = if key == "NEUROGATE_API_KEY" || key == "VIBEMODE_API_KEY" || key == "VIBEMOD_API_KEY" {
+    let keys = if key == "NEUROGATE_API_KEY"
+        || key == "VIBEMODE_API_KEY"
+        || key == "VIBEMOD_API_KEY"
+    {
         vec!["VIBEMODE_API_KEY", "VIBEMOD_API_KEY", "NEUROGATE_API_KEY"]
-    } else if key == "NEUROGATE_API_BASE" || key == "VIBEMODE_API_BASE" || key == "VIBEMOD_API_BASE" {
-        vec!["VIBEMODE_API_BASE", "VIBEMOD_API_BASE", "NEUROGATE_API_BASE"]
+    } else if key == "NEUROGATE_API_BASE" || key == "VIBEMODE_API_BASE" || key == "VIBEMOD_API_BASE"
+    {
+        vec![
+            "VIBEMODE_API_BASE",
+            "VIBEMOD_API_BASE",
+            "NEUROGATE_API_BASE",
+        ]
     } else {
         vec![key]
     };
