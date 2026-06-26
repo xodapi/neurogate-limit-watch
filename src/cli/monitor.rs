@@ -67,6 +67,7 @@ pub struct StatusSnapshot {
     pub windows: Vec<ng::WindowState>,
     pub abtop: Option<Value>,
     pub fetched_at: chrono::DateTime<chrono::Utc>,
+    pub stale: bool,
 }
 
 pub fn collect_status(
@@ -75,26 +76,41 @@ pub fn collect_status(
     http: &ng::HttpClient,
     cache: Option<&CacheStore>,
 ) -> Result<StatusSnapshot, String> {
-    let payload = if args.demo {
-        ng::demo_payload()
+    let fetch_result: Result<(serde_json::Value, bool), String> = if args.demo {
+        Ok((ng::demo_payload(), false))
     } else if let Some(path) = &args.mock {
-        ng::load_mock(path)?
-    } else if !args.no_cache {
-        if let Some(store) = cache {
-            if let Some((cached, _when)) = store.get(&config.api_key, &config.api_base) {
-                return Ok(snapshot_from_payload(args, config, cached));
+        ng::load_mock(path).map(|v| (v, false))
+    } else {
+        let fetch = http.fetch_me_with_retry(&config.api_key, &config.api_base);
+        match fetch {
+            Ok(payload) => {
+                if let Some(store) = cache {
+                    let _ = store.set(&config.api_key, &config.api_base, &payload);
+                }
+                Ok((payload, false))
+            }
+            Err(error) => {
+                if !args.no_cache {
+                    if let Some(store) = cache {
+                        if let Some((cached, _when)) = store.get(&config.api_key, &config.api_base)
+                        {
+                            return Ok(StatusSnapshot {
+                                stale: true,
+                                ..snapshot_from_payload(args, config, cached)
+                            });
+                        }
+                    }
+                }
+                Err(error)
             }
         }
-        let payload = http.fetch_me_with_retry(&config.api_key, &config.api_base)?;
-        if let Some(store) = cache {
-            let _ = store.set(&config.api_key, &config.api_base, &payload);
-        }
-        payload
-    } else {
-        http.fetch_me_with_retry(&config.api_key, &config.api_base)?
     };
 
-    Ok(snapshot_from_payload(args, config, payload))
+    let (payload, _stale) = fetch_result?;
+    Ok(StatusSnapshot {
+        stale: false,
+        ..snapshot_from_payload(args, config, payload)
+    })
 }
 
 fn snapshot_from_payload(
@@ -117,6 +133,7 @@ fn snapshot_from_payload(
         windows,
         abtop,
         fetched_at: chrono::Utc::now(),
+        stale: false,
     }
 }
 
@@ -383,8 +400,9 @@ fn draw_header(
             } else {
                 "OK"
             };
+            let stale_tag = if s.stale { " STALE" } else { "" };
             (
-                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label} | {label} | peak {peak} "),
+                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag} | {label} | peak {peak} "),
                 pal.bold_level_style(level),
             )
         }
@@ -1366,6 +1384,7 @@ mod tests {
 
     fn test_snapshot() -> StatusSnapshot {
         StatusSnapshot {
+            stale: false,
             windows: ng::summarize_me(&ng::demo_payload(), 75.0, 90.0),
             abtop: Some(serde_json::json!({
                 "token_rate": 42.0,

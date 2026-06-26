@@ -18,7 +18,8 @@ pub fn run_once(
     if let Some(store) = trends {
         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
     }
-    let status = ng::summary_to_json(&snapshot.windows, snapshot.abtop.as_ref());
+    let status =
+        ng::summary_to_json_with_stale(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.stale);
 
     match args.output {
         OutputMode::Json => {
@@ -29,7 +30,9 @@ pub fn run_once(
             );
         }
         OutputMode::Compact => print_compact(&snapshot.windows, snapshot.abtop.as_ref()),
-        OutputMode::Human => print_human(&snapshot.windows, snapshot.abtop.as_ref()),
+        OutputMode::Human => {
+            print_human(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.stale)
+        }
     }
 
     notifier.check_windows(&snapshot.windows);
@@ -57,8 +60,9 @@ fn color_percent(percent: f64) -> String {
     format!("\x1b[{code}m{:.0}%\x1b[0m", percent)
 }
 
-pub fn print_human(windows: &[ng::WindowState], abtop: Option<&Value>) {
-    println!("VibeMode limits");
+pub fn print_human(windows: &[ng::WindowState], abtop: Option<&Value>, stale: bool) {
+    let tag = if stale { " (cached)" } else { "" };
+    println!("VibeMode limits{tag}");
     if windows.is_empty() {
         println!("  usage rows not found in /v1/me response");
     }
