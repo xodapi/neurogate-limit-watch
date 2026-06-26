@@ -85,13 +85,13 @@ pub fn collect_status(
                 return Ok(snapshot_from_payload(args, config, cached));
             }
         }
-        let payload = http.fetch_me(&config.api_key, &config.api_base)?;
+        let payload = http.fetch_me_with_retry(&config.api_key, &config.api_base)?;
         if let Some(store) = cache {
             let _ = store.set(&config.api_key, &config.api_base, &payload);
         }
         payload
     } else {
-        http.fetch_me(&config.api_key, &config.api_base)?
+        http.fetch_me_with_retry(&config.api_key, &config.api_base)?
     };
 
     Ok(snapshot_from_payload(args, config, payload))

@@ -161,6 +161,44 @@ impl HttpClient {
         }
         Ok(value)
     }
+
+    pub fn fetch_me_with_retry(&self, api_key: &str, api_base: &str) -> Result<Value, String> {
+        let max_retries: u32 = 3;
+        let base_delay_ms: u64 = 1000;
+
+        for attempt in 0..=max_retries {
+            match self.fetch_me(api_key, api_base) {
+                Ok(value) => return Ok(value),
+                Err(error) => {
+                    let is_retryable = is_retryable_error(&error);
+                    if !is_retryable || attempt == max_retries {
+                        return Err(if attempt > 0 {
+                            format!(
+                                "{error} (after {} retr{})",
+                                attempt,
+                                if attempt == 1 { "y" } else { "ies" }
+                            )
+                        } else {
+                            error
+                        });
+                    }
+                    let delay_ms = base_delay_ms * (1u64 << attempt);
+                    let jitter = (rand::random::<u64>() % 500).min(delay_ms / 2);
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms + jitter));
+                }
+            }
+        }
+
+        Err("max retries exceeded".to_string())
+    }
+}
+
+fn is_retryable_error(error: &str) -> bool {
+    error.contains("HTTP 429")
+        || error.contains("HTTP 5")
+        || error.contains("cannot reach")
+        || error.contains("timed out")
+        || error.contains("connection")
 }
 
 pub fn fetch_me(api_key: &str, api_base: &str, user_agent: &str) -> Result<Value, String> {
