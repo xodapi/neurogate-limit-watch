@@ -69,6 +69,7 @@ pub struct StatusSnapshot {
     pub fetched_at: chrono::DateTime<chrono::Utc>,
     pub stale: bool,
     pub latency_ms: u64,
+    pub api_endpoint: String,
 }
 
 pub fn collect_status(
@@ -76,30 +77,40 @@ pub fn collect_status(
     config: &ng::RuntimeConfig,
     http: &ng::HttpClient,
     cache: Option<&CacheStore>,
+    mut router: Option<&mut ng::Router>,
 ) -> Result<StatusSnapshot, String> {
-    let fetch_result: Result<(serde_json::Value, u64), String> = if args.demo {
-        Ok((ng::demo_payload(), 0))
+    let fetch_result: Result<(serde_json::Value, u64, String), String> = if args.demo {
+        Ok((ng::demo_payload(), 0, "demo".to_string()))
     } else if let Some(path) = &args.mock {
-        ng::load_mock(path).map(|v| (v, 0))
+        ng::load_mock(path).map(|v| (v, 0, "mock".to_string()))
     } else {
         let start = Instant::now();
-        let fetch = http.fetch_me_with_retry(&config.api_key, &config.api_base);
+        let result = if let Some(ref mut r) = router {
+            http.fetch_me_with_retry(&config.api_key, r, &config.api_base)
+        } else {
+            let mut fallback_router = ng::Router::new(config.api_base.clone(), vec![]);
+            http.fetch_me_with_retry(&config.api_key, &mut fallback_router, &config.api_base)
+        };
         let elapsed = start.elapsed().as_millis() as u64;
-        match fetch {
-            Ok(payload) => {
+        match result {
+            Ok((payload, label)) => {
                 if let Some(store) = cache {
                     let _ = store.set(&config.api_key, &config.api_base, &payload);
                 }
-                Ok((payload, elapsed))
+                Ok((payload, elapsed, label))
             }
             Err(error) => {
                 if !args.no_cache {
                     if let Some(store) = cache {
                         if let Some((cached, _when)) = store.get(&config.api_key, &config.api_base)
                         {
+                            let label = router
+                                .map(|r| r.active_label().to_string())
+                                .unwrap_or_else(|| "cached".to_string());
                             return Ok(StatusSnapshot {
                                 stale: true,
                                 latency_ms: elapsed,
+                                api_endpoint: label,
                                 ..snapshot_from_payload(args, config, cached)
                             });
                         }
@@ -110,10 +121,11 @@ pub fn collect_status(
         }
     };
 
-    let (payload, latency_ms) = fetch_result?;
+    let (payload, latency_ms, api_endpoint) = fetch_result?;
     Ok(StatusSnapshot {
         stale: false,
         latency_ms,
+        api_endpoint,
         ..snapshot_from_payload(args, config, payload)
     })
 }
@@ -140,6 +152,7 @@ fn snapshot_from_payload(
         fetched_at: chrono::Utc::now(),
         stale: false,
         latency_ms: 0,
+        api_endpoint: "r-api".to_string(),
     }
 }
 
@@ -189,6 +202,10 @@ pub fn run_monitor(
     };
 
     let mut account: Option<&AccountConfig> = None;
+    let mut router = ng::Router::new(
+        ng::DEFAULT_API_BASE.to_string(),
+        vec![ng::VPN_API_BASE.to_string()],
+    );
 
     loop {
         let now = Instant::now();
@@ -199,7 +216,7 @@ pub fn run_monitor(
                 None
             };
             match load_config(args, account, panels.vpn_mode)
-                .and_then(|config| collect_status(args, &config, &http, cache))
+                .and_then(|config| collect_status(args, &config, &http, cache, Some(&mut router)))
             {
                 Ok(snapshot) => {
                     if let Some(store) = trends {
@@ -412,8 +429,13 @@ fn draw_header(
             } else {
                 String::new()
             };
+            let endpoint_tag = if s.api_endpoint != "r-api" && !s.api_endpoint.is_empty() {
+                format!(" /{}", s.api_endpoint)
+            } else {
+                String::new()
+            };
             (
-                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag} | {label} | peak {peak} "),
+                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag}{endpoint_tag} | {label} | peak {peak} "),
                 pal.bold_level_style(level),
             )
         }
@@ -1414,6 +1436,7 @@ mod tests {
             })),
             fetched_at: chrono::Utc.timestamp_opt(0, 0).single().unwrap(),
             latency_ms: 0,
+            api_endpoint: "r-api".to_string(),
         }
     }
 

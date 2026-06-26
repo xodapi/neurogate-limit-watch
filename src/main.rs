@@ -150,6 +150,10 @@ fn real_main() -> Result<i32, String> {
     let cache = CacheStore::open()?;
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
+    let mut router = ng::Router::new(
+        ng::DEFAULT_API_BASE.to_string(),
+        vec![ng::VPN_API_BASE.to_string()],
+    );
     if args.monitor {
         let account_names = accounts.list_names();
         let account_configs: Vec<cli::accounts::AccountConfig> = account_names
@@ -181,6 +185,7 @@ fn real_main() -> Result<i32, String> {
             &http,
             trends.as_ref(),
             cache.as_ref(),
+            Some(&mut router),
         )?;
         if args.watch == 0 {
             return Ok(code);

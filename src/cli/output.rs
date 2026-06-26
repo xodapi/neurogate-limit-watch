@@ -13,8 +13,9 @@ pub fn run_once(
     http: &ng::HttpClient,
     trends: Option<&TrendStore>,
     cache: Option<&CacheStore>,
+    router: Option<&mut ng::Router>,
 ) -> Result<i32, String> {
-    let snapshot = super::monitor::collect_status(args, config, http, cache)?;
+    let snapshot = super::monitor::collect_status(args, config, http, cache, router)?;
     if let Some(store) = trends {
         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
     }
@@ -23,6 +24,7 @@ pub fn run_once(
         snapshot.abtop.as_ref(),
         snapshot.stale,
         snapshot.latency_ms,
+        &snapshot.api_endpoint,
     );
 
     match args.output {
