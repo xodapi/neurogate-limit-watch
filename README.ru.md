@@ -2,7 +2,7 @@
 
 [English](README.md) | [Русский](README.ru.md)
 
-[![CI](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml)
+[![CI](https://github.com/xodapi/vimit/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
 **vimit** — один нативный бинарник для мониторинга лимитов VibeMode в реальном времени.
 
@@ -89,7 +89,7 @@ vimit --init
 
 Бинарные релизы:
 
-https://github.com/xodapi/neurogate-limit-watch/releases
+https://github.com/xodapi/vimit/releases
 
 Скачайте архив под свою платформу, распакуйте и запустите:
 
@@ -158,8 +158,8 @@ notepad .env
 Требуется Rust stable.
 
 ```bash
-git clone https://github.com/xodapi/neurogate-limit-watch.git
-cd neurogate-limit-watch
+git clone https://github.com/xodapi/vimit.git
+cd vimit
 cargo build --release --locked
 ```
 
@@ -328,7 +328,7 @@ vimit --help
 Идеи, предложения и заметки по VibeMode/Codex/Droid workflow можно оставлять
 в GitHub Discussions:
 
-https://github.com/xodapi/neurogate-limit-watch/discussions
+https://github.com/xodapi/vimit/discussions
 
 Текущий список улучшений: [ROADMAP.md](ROADMAP.md).
 

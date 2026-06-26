@@ -1,6 +1,6 @@
 # Security
 
-`neurogate-limit-watch` is intentionally small, local-first, and Rust-first.
+`vimit` is intentionally small, local-first, and Rust-first.
 
 ## Secrets
 

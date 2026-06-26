@@ -3,7 +3,7 @@
 This file keeps public improvement ideas in one place. Please discuss and vote
 in GitHub Discussions:
 
-https://github.com/xodapi/neurogate-limit-watch/discussions
+https://github.com/xodapi/vimit/discussions
 
 ## High Impact / Самое полезное
 

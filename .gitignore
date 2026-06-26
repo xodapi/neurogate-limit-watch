@@ -8,6 +8,6 @@ build/
 *.egg-info/
 target/
 .env
-neurogate-limit-watch.json
+vimit.json
 
 .cursor/

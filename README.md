@@ -2,7 +2,7 @@
 
 [English](README.md) | [Русский](README.ru.md)
 
-[![CI](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml)
+[![CI](https://github.com/xodapi/vimit/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
 **vimit** — single native binary to monitor VibeMode quota in real time.
 
@@ -53,7 +53,7 @@ private prompts.
 
 Release binaries:
 
-https://github.com/xodapi/neurogate-limit-watch/releases
+https://github.com/xodapi/vimit/releases
 
 Pick the archive for your platform, unpack it, then run:
 
@@ -130,8 +130,8 @@ by git and should not be committed.
 Requirements: Rust stable.
 
 ```bash
-git clone https://github.com/xodapi/neurogate-limit-watch.git
-cd neurogate-limit-watch
+git clone https://github.com/xodapi/vimit.git
+cd vimit
 cargo build --release --locked
 ```
 
@@ -338,7 +338,7 @@ vimit --help
 Ideas, feature requests, and VibeMode/Codex/Droid workflow notes are welcome
 in GitHub Discussions:
 
-https://github.com/xodapi/neurogate-limit-watch/discussions
+https://github.com/xodapi/vimit/discussions
 
 See [ROADMAP.md](ROADMAP.md) for the current improvement backlog.
 
