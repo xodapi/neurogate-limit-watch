@@ -5,10 +5,11 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-pub const DEFAULT_API_BASE: &str = "https://api.neurogate.space";
+pub const DEFAULT_API_BASE: &str = "https://r-api.vibemod.pro";
+pub const VPN_API_BASE: &str = "https://api.vibemod.pro";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const USER_AGENT: &str = concat!("neurogate-limit-watch/", env!("CARGO_PKG_VERSION"));
-pub const USER_AGENT_GUI: &str = concat!("neurogate-limit-watch-gui/", env!("CARGO_PKG_VERSION"));
+pub const USER_AGENT: &str = concat!("vimit/", env!("CARGO_PKG_VERSION"));
+pub const USER_AGENT_GUI: &str = concat!("vimit-gui/", env!("CARGO_PKG_VERSION"));
 pub const DEFAULT_WARNING_THRESHOLD: f64 = 75.0;
 pub const DEFAULT_DANGER_THRESHOLD: f64 = 90.0;
 pub const DEFAULT_ABTOP_BIN: &str = "abtop";
@@ -129,7 +130,7 @@ impl HttpClient {
             .bearer_auth(api_key)
             .header(reqwest::header::ACCEPT, "application/json")
             .send()
-            .map_err(|error| format!("cannot reach NeuroGate API: {error}"))?;
+            .map_err(|error| format!("cannot reach VibeMode API: {error}"))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -140,7 +141,7 @@ impl HttpClient {
                 404 => "check NEUROGATE_API_BASE".to_string(),
                 429 => "rate limited — try --watch with a longer interval".to_string(),
                 _ if code >= 500 => {
-                    "server error — try again later or check status.neurogate.space".to_string()
+                    "server error — try again later or check status.vibemod.pro".to_string()
                 }
                 _ => String::new(),
             };
@@ -149,14 +150,14 @@ impl HttpClient {
             } else {
                 format!("\n  hint: {hint}")
             };
-            return Err(format!("NeuroGate /v1/me returned HTTP {code}{hint}"));
+            return Err(format!("VibeMode /v1/me returned HTTP {code}{hint}"));
         }
 
         let value: Value = response
             .json()
-            .map_err(|error| format!("NeuroGate /v1/me returned invalid JSON: {error}"))?;
+            .map_err(|error| format!("VibeMode /v1/me returned invalid JSON: {error}"))?;
         if !value.is_object() {
-            return Err("NeuroGate /v1/me returned a non-object JSON payload".to_string());
+            return Err("VibeMode /v1/me returned a non-object JSON payload".to_string());
         }
         Ok(value)
     }
@@ -680,7 +681,7 @@ fn window_level_from_peak(peak: f64) -> &'static str {
 
 pub fn summary_to_json(windows: &[WindowState], abtop: Option<&Value>) -> Value {
     json!({
-        "source": "neurogate",
+        "source": "vibemode",
         "windows": windows.iter().map(window_to_json).collect::<Vec<_>>(),
         "abtop": abtop.cloned().unwrap_or(Value::Null),
     })
@@ -916,7 +917,7 @@ mod tests {
         });
         let encoded = summary_to_json(&summarize_me(&payload, 75.0, 90.0), None).to_string();
 
-        assert!(encoded.contains("\"source\":\"neurogate\""));
+        assert!(encoded.contains("\"source\":\"vibemode\""));
         assert!(!encoded.contains("usr_demo"));
     }
 
@@ -933,7 +934,7 @@ mod tests {
             r#"
             # comment
             export NEUROGATE_API_KEY="demo"
-            NEUROGATE_API_BASE=https://api.neurogate.space
+            NEUROGATE_API_BASE=https://r-api.vibemod.pro
             ABTOP_BIN='abtop'
             "#,
         )
@@ -942,7 +943,7 @@ mod tests {
         assert_eq!(parsed.get("NEUROGATE_API_KEY").unwrap(), "demo");
         assert_eq!(
             parsed.get("NEUROGATE_API_BASE").unwrap(),
-            "https://api.neurogate.space"
+            "https://r-api.vibemod.pro"
         );
         assert_eq!(parsed.get("ABTOP_BIN").unwrap(), "abtop");
     }

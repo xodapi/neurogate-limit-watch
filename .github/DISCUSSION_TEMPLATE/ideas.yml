@@ -11,7 +11,7 @@ body:
     attributes:
       label: Problem / Боль
       description: What workflow problem should this solve?
-      placeholder: "Example: I want to see NeuroGate 5h quota in a Droid widget."
+      placeholder: "Example: I want to see VibeMode 5h quota in a Droid widget."
     validations:
       required: true
   - type: textarea
@@ -27,7 +27,7 @@ body:
     attributes:
       label: Area / Область
       options:
-        - NeuroGate limits
+        - VibeMode limits
         - Codex
         - Droid / Termux
         - abtop integration

@@ -1,24 +1,31 @@
 [package]
-name = "neurogate-limit-watch"
+name = "vimit"
 version = "0.6.0"
 edition = "2021"
 license = "MIT"
 authors = ["xodapi"]
-description = "Safe NeuroGate quota monitor for Codex/Droid workflows"
+description = "Safe VibeMode quota monitor for Codex/Droid workflows"
 repository = "https://github.com/xodapi/neurogate-limit-watch"
 readme = "README.md"
-default-run = "nglimit"
-keywords = ["neurogate", "codex", "droid", "limits", "monitoring"]
+default-run = "vimit"
+keywords = ["vibemode", "neurogate", "codex", "droid", "limits", "monitoring"]
 categories = ["command-line-utilities"]
 
 [[bin]]
-name = "nglimit"
+name = "vimit"
 path = "src/main.rs"
 
 [[bin]]
-name = "nglimit-gui"
-path = "src/bin/nglimit-gui.rs"
+name = "vimit-gui"
+path = "src/bin/vimit-gui.rs"
 required-features = ["gui"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
 
 [features]
 default = []

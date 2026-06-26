@@ -5,7 +5,7 @@ use chrono::{NaiveDate, Utc};
 use redb::{Database, TableDefinition};
 use serde_json::Value;
 
-use neurogate_limit_watch::WindowState;
+use vimit::WindowState;
 
 use super::config::dirs_or_default;
 
@@ -230,16 +230,16 @@ fn serialize_windows(windows: &[WindowState], fetched_at: &chrono::DateTime<Utc>
 fn default_trends_path() -> Option<PathBuf> {
     let home = dirs_or_default()?;
     let config_dir = if cfg!(windows) {
-        home.join("nglimit")
+        home.join("vimit")
     } else {
-        home.join(".config").join("nglimit")
+        home.join(".config").join("vimit")
     };
     Some(config_dir.join("trends.redb"))
 }
 
 pub fn print_trends_human(days: &[TrendDay]) {
     if days.is_empty() {
-        println!("No trend data found. Run nglimit a few times to collect snapshots.");
+        println!("No trend data found. Run vimit a few times to collect snapshots.");
         return;
     }
     println!("Trends ({} day(s)):", days.len());
@@ -286,7 +286,7 @@ pub fn print_trends_json(days: &[TrendDay]) {
             })
         })
         .collect();
-    let output = serde_json::json!({ "source": "neurogate", "trends": list });
+    let output = serde_json::json!({ "source": "vibemode", "trends": list });
     println!(
         "{}",
         serde_json::to_string_pretty(&output).unwrap_or_else(|_| "{}".to_string())

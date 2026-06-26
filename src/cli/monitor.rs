@@ -10,7 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::time::{Duration, Instant};
 
-use neurogate_limit_watch::{self as ng, VERSION};
+use vimit::{self as ng, VERSION};
 
 use super::accounts::AccountConfig;
 use super::args::{Args, Preset};
@@ -30,6 +30,7 @@ pub struct PanelState {
     pub show_trends: bool,
     pub show_footer: bool,
     pub show_help: bool,
+    pub vpn_mode: bool,
 }
 
 impl Default for PanelState {
@@ -42,6 +43,7 @@ impl Default for PanelState {
             show_trends: false,
             show_footer: true,
             show_help: false,
+            vpn_mode: false,
         }
     }
 }
@@ -71,15 +73,35 @@ pub fn collect_status(
     args: &Args,
     config: &ng::RuntimeConfig,
     http: &ng::HttpClient,
+    cache: Option<&CacheStore>,
 ) -> Result<StatusSnapshot, String> {
     let payload = if args.demo {
         ng::demo_payload()
     } else if let Some(path) = &args.mock {
         ng::load_mock(path)?
+    } else if !args.no_cache {
+        if let Some(store) = cache {
+            if let Some((cached, _when)) = store.get(&config.api_key, &config.api_base) {
+                return Ok(snapshot_from_payload(args, config, cached));
+            }
+        }
+        let payload = http.fetch_me(&config.api_key, &config.api_base)?;
+        if let Some(store) = cache {
+            let _ = store.set(&config.api_key, &config.api_base, &payload);
+        }
+        payload
     } else {
         http.fetch_me(&config.api_key, &config.api_base)?
     };
 
+    Ok(snapshot_from_payload(args, config, payload))
+}
+
+fn snapshot_from_payload(
+    args: &Args,
+    config: &ng::RuntimeConfig,
+    payload: serde_json::Value,
+) -> StatusSnapshot {
     let windows = ng::summarize_me_with_thresholds(
         &payload,
         args.warning_threshold,
@@ -91,13 +113,14 @@ pub fn collect_status(
     } else {
         None
     };
-
-    Ok(StatusSnapshot {
+    StatusSnapshot {
         windows,
         abtop,
         fetched_at: chrono::Utc::now(),
-    })
+    }
 }
+
+use super::cache::CacheStore;
 
 pub fn run_monitor(
     args: &Args,
@@ -106,6 +129,7 @@ pub fn run_monitor(
     account_configs: &[AccountConfig],
     initial_account_idx: usize,
     trends: Option<&TrendStore>,
+    cache: Option<&CacheStore>,
 ) -> Result<i32, String> {
     let interval_secs = monitor_interval(args);
     let interval = Duration::from_secs(interval_secs);
@@ -136,17 +160,23 @@ pub fn run_monitor(
     let mut window_history: HashMap<&str, WindowHistory> = HashMap::new();
     let mut trend_days: Vec<TrendDay> = Vec::new();
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
-    let mut panels = PanelState::default();
+    let mut panels = PanelState {
+        vpn_mode: args.vpn,
+        ..PanelState::default()
+    };
+
+    let mut account: Option<&AccountConfig> = None;
 
     loop {
         let now = Instant::now();
         if force_refresh || now >= next_refresh {
-            let account = if has_accounts && total_accounts > 1 {
+            account = if has_accounts && total_accounts > 1 {
                 Some(&account_configs[cur_account])
             } else {
                 None
             };
-            match load_config(args, account).and_then(|config| collect_status(args, &config, &http))
+            match load_config(args, account, panels.vpn_mode)
+                .and_then(|config| collect_status(args, &config, &http, cache))
             {
                 Ok(snapshot) => {
                     if let Some(store) = trends {
@@ -215,7 +245,14 @@ pub fn run_monitor(
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         return Ok(130);
                     }
-                    KeyCode::Char('r') => force_refresh = true,
+                    KeyCode::Char('r') => {
+                        if let Some(store) = cache {
+                            if let Ok(config) = load_config(args, account, panels.vpn_mode) {
+                                let _ = store.remove(&config.api_key, &config.api_base);
+                            }
+                        }
+                        force_refresh = true;
+                    }
                     KeyCode::Char('?') => panels.show_help = !panels.show_help,
                     KeyCode::Char('1') => panels.toggle(1),
                     KeyCode::Char('2') => panels.toggle(2),
@@ -224,6 +261,10 @@ pub fn run_monitor(
                     KeyCode::Char('5') => panels.toggle(5),
                     KeyCode::Tab if has_accounts && total_accounts > 1 => {
                         cur_account = (cur_account + 1) % total_accounts;
+                        force_refresh = true;
+                    }
+                    KeyCode::Char('p') => {
+                        panels.vpn_mode = !panels.vpn_mode;
                         force_refresh = true;
                     }
                     _ => {}
@@ -283,7 +324,7 @@ fn draw_frame(
 
     let mut idx = 0;
     if panels.show_header {
-        draw_header(frame, chunks[idx], snapshot, &pal, current_account);
+        draw_header(frame, chunks[idx], snapshot, &pal, current_account, panels);
         idx += 1;
     }
     if panels.show_quota {
@@ -323,10 +364,12 @@ fn draw_header(
     snapshot: Option<&StatusSnapshot>,
     pal: &Palette,
     current_account: Option<&str>,
+    panels: &PanelState,
 ) {
     let account_prefix = current_account
         .map(|name| format!(" [{name}]"))
         .unwrap_or_default();
+    let vpn_label = if panels.vpn_mode { " VPN" } else { " Dir" };
     let (title, style) = match snapshot {
         Some(s) => {
             let level = ng::worst_level(&s.windows);
@@ -341,12 +384,12 @@ fn draw_header(
                 "OK"
             };
             (
-                format!(" NeuroGate v{VERSION}{account_prefix} | {label} | peak {peak} "),
+                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label} | {label} | peak {peak} "),
                 pal.bold_level_style(level),
             )
         }
         None => (
-            format!(" NeuroGate v{VERSION}{account_prefix} | waiting for data... "),
+            format!(" VibeMode v{VERSION}{account_prefix}{vpn_label} | waiting for data... "),
             Style::default().fg(pal.muted),
         ),
     };
@@ -431,7 +474,7 @@ fn draw_body(
         }
     } else {
         let waiting = Paragraph::new(Span::styled(
-            "Collecting NeuroGate status...",
+            "Collecting VibeMode status...",
             pal.muted_style(),
         ))
         .block(
@@ -699,13 +742,26 @@ fn draw_footer(
     frame.render_widget(footer, area);
 }
 
-fn load_config(args: &Args, account: Option<&AccountConfig>) -> Result<ng::RuntimeConfig, String> {
+fn load_config(
+    args: &Args,
+    account: Option<&AccountConfig>,
+    vpn_mode: bool,
+) -> Result<ng::RuntimeConfig, String> {
     let (api_base, api_key_env) = match account {
         Some(acct) => (
             acct.api_base.clone().or_else(|| args.api_base.clone()),
             acct.api_key_env.as_deref().unwrap_or(&args.api_key_env),
         ),
-        None => (args.api_base.clone(), args.api_key_env.as_str()),
+        None => {
+            let base = if vpn_mode {
+                args.api_base
+                    .clone()
+                    .or_else(|| Some(ng::VPN_API_BASE.to_string()))
+            } else {
+                args.api_base.clone()
+            };
+            (base, args.api_key_env.as_str())
+        }
     };
     ng::RuntimeConfig::from_dotenv(api_base, api_key_env, args.env_file.as_ref())
 }
@@ -765,7 +821,7 @@ fn draw_trend_panel(
 
     if trend_days.is_empty() {
         let msg = Paragraph::new(Span::styled(
-            "no trend data yet — run nglimit to collect snapshots",
+            "no trend data yet — run vimit to collect snapshots",
             pal.muted_style(),
         ))
         .block(block);
@@ -829,7 +885,7 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
 
     let help_text = vec![
         Line::from(Span::styled(
-            "  NeuroGate Monitor - Keybindings",
+            "  VibeMode Monitor - Keybindings",
             pal.bold_level_style("ok"),
         )),
         Line::from(""),
@@ -848,6 +904,10 @@ fn draw_help_overlay(frame: &mut ratatui::Frame, theme: Theme) {
         Line::from(vec![
             Span::styled("  ?", pal.key_binding_style()),
             Span::raw("            Toggle this help"),
+        ]),
+        Line::from(vec![
+            Span::styled("  p", pal.key_binding_style()),
+            Span::raw("            Toggle VPN/Direct endpoint"),
         ]),
         Line::from(""),
         Line::from(Span::styled("  Panel Toggles:", pal.accent_style())),
@@ -992,10 +1052,10 @@ pub fn render_monitor_lines(
                 .unwrap_or_else(|| "n/a".to_string());
             let agents = abtop_agent_summary(snapshot.abtop.as_ref());
             format!(
-                "nglimit v{VERSION}  NeuroGate monitor  quota:{level} peak:{peak}  {agents}  {now}"
+                "vimit v{VERSION}  VibeMode monitor  quota:{level} peak:{peak}  {agents}  {now}"
             )
         }
-        None => format!("nglimit v{VERSION}  NeuroGate monitor  waiting for first refresh  {now}"),
+        None => format!("vimit v{VERSION}  VibeMode monitor  waiting for first refresh  {now}"),
     };
     lines.push(fit_text(&title, width));
 
@@ -1009,7 +1069,7 @@ pub fn render_monitor_lines(
         lines.push(panel_bottom(width));
     }
 
-    lines.push(panel_top("neurogate quota", width));
+    lines.push(panel_top("vibemode quota", width));
     if let Some(snapshot) = snapshot {
         lines.push(panel_line(
             &format!(
@@ -1052,7 +1112,7 @@ pub fn render_monitor_lines(
             ));
         }
     } else {
-        lines.push(panel_line("collecting NeuroGate status...", width));
+        lines.push(panel_line("collecting VibeMode status...", width));
     }
     lines.push(panel_bottom(width));
 
@@ -1331,7 +1391,7 @@ mod tests {
         let snapshot = test_snapshot();
         let rendered = render_monitor(Some(&snapshot), None, 100, 30, 5, 4, true, 75.0);
 
-        assert!(rendered.contains("neurogate quota"));
+        assert!(rendered.contains("vibemode quota"));
         assert!(rendered.contains("alerts"));
         assert!(rendered.contains("local agents"));
         assert!(rendered.contains("codex"));

@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="360" viewBox="0 0 920 360" role="img" aria-label="neurogate-limit-watch terminal demo">
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="360" viewBox="0 0 920 360" role="img" aria-label="vimit terminal demo">
   <rect width="920" height="360" fill="#151515"/>
   <rect x="24" y="24" width="872" height="312" rx="10" fill="#1f1f1f" stroke="#3c6e57"/>
-  <text x="48" y="66" fill="#eeeeee" font-family="Consolas, monospace" font-size="24" font-weight="700">neurogate-limit-watch</text>
-  <text x="48" y="106" fill="#9ed2ad" font-family="Consolas, monospace" font-size="20">NeuroGate limits</text>
+  <text x="48" y="66" fill="#eeeeee" font-family="Consolas, monospace" font-size="24" font-weight="700">vimit</text>
+  <text x="48" y="106" fill="#9ed2ad" font-family="Consolas, monospace" font-size="20">VibeMode limits</text>
   <text x="72" y="146" fill="#eeeeee" font-family="Consolas, monospace" font-size="18">5h   warning reset in 2h 30m</text>
   <text x="96" y="178" fill="#d6d6d6" font-family="Consolas, monospace" font-size="18">credits  39/50 (78.0%, left 11)</text>
   <text x="96" y="210" fill="#d6d6d6" font-family="Consolas, monospace" font-size="18">requests 610/1000 (61.0%, left 390)</text>

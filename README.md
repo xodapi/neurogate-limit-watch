@@ -1,14 +1,14 @@
-# neurogate-limit-watch
+# vimit
 
 [English](README.md) | [Русский](README.ru.md)
 
 [![CI](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml)
 
-**nglimit** — single native binary to monitor NeuroGate quota in real time.
+**vimit** — single native binary to monitor VibeMode quota in real time.
 
 Polls `GET /v1/me`, summarizes credit/request windows (5h / 24h / 7d / 30d),
 renders a live TUI dashboard (or JSON / compact text), sends desktop
-notifications on threshold breach, and supports multiple NeuroGate accounts.
+notifications on threshold breach, and supports multiple VibeMode accounts.
 
 No Python, Node, or SDK dependencies — just one executable.
 
@@ -18,17 +18,17 @@ No Python, Node, or SDK dependencies — just one executable.
 
 ```bash
 # Download from releases, then:
-nglimit --demo                # try without an API key
-nglimit --demo --monitor      # full-screen dashboard
-nglimit --init                # interactive setup wizard
-nglimit                       # real NeuroGate limits
-nglimit --doctor              # system diagnostics
+vimit --demo                # try without an API key
+vimit --demo --monitor      # full-screen dashboard
+vimit --init                # interactive setup wizard
+vimit                       # real VibeMode limits
+vimit --doctor              # system diagnostics
 ```
 
 ## Why
 
 Vibe coders need to know whether they can safely keep a Codex/Droid/Claude
-session running or whether they are about to hit NeuroGate limits. The tool is
+session running or whether they are about to hit VibeMode limits. The tool is
 small, local-first, and intentionally avoids storing API keys or logging
 private prompts.
 
@@ -58,27 +58,27 @@ https://github.com/xodapi/neurogate-limit-watch/releases
 Pick the archive for your platform, unpack it, then run:
 
 ```bash
-nglimit --version
-nglimit --demo
-nglimit --demo --monitor
+vimit --version
+vimit --demo
+vimit --demo --monitor
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\nglimit.exe --version
-.\nglimit.exe --demo
-.\nglimit.exe --demo --monitor
+.\vimit.exe --version
+.\vimit.exe --demo
+.\vimit.exe --demo --monitor
 ```
 
-If you double-click `nglimit.exe` in Explorer, the Windows console will stay
+If you double-click `vimit.exe` in Explorer, the Windows console will stay
 open after the command finishes. The Windows archive also includes
-`nglimit-open.cmd`, a double-click helper that always pauses at the end, and
-`nglimit-monitor.cmd` for launching the live monitor directly.
+`vimit-open.cmd`, a double-click helper that always pauses at the end, and
+`vimit-monitor.cmd` for launching the live monitor directly.
 
 ## .env Next To The Binary
 
-You can keep the NeuroGate API key in a local `.env` file next to `nglimit`
+You can keep the VibeMode API key in a local `.env` file next to `vimit`
 or in the directory where you run it. The release archive includes
 `.env.example`.
 
@@ -90,15 +90,15 @@ Edit `.env`:
 
 ```dotenv
 NEUROGATE_API_KEY=YOUR_NEUROGATE_API_KEY
-NEUROGATE_API_BASE=https://api.neurogate.space
+NEUROGATE_API_BASE=https://r-api.vibemod.pro
 ```
 
 Then run:
 
 ```bash
-nglimit
-nglimit --compact
-nglimit --json
+vimit
+vimit --compact
+vimit --json
 ```
 
 Windows PowerShell:
@@ -106,21 +106,21 @@ Windows PowerShell:
 ```powershell
 Copy-Item .env.example .env
 notepad .env
-.\nglimit.exe --compact
+.\vimit.exe --compact
 ```
 
 Double-click option on Windows:
 
 ```text
-nglimit-open.cmd
-nglimit-monitor.cmd
+vimit-open.cmd
+vimit-monitor.cmd
 ```
 
 Lookup order:
 
 1. `--env-file <PATH>`
 2. `.env` in the current directory
-3. `.env` next to the `nglimit` executable
+3. `.env` next to the `vimit` executable
 
 Real environment variables have priority over `.env` values. `.env` is ignored
 by git and should not be committed.
@@ -137,23 +137,23 @@ cargo build --release --locked
 
 Binary location:
 
-- Windows: `target/release/nglimit.exe`
-- Linux/macOS: `target/release/nglimit`
+- Windows: `target/release/vimit.exe`
+- Linux/macOS: `target/release/vimit`
 
 ## Diagnostics
 
 Check system health:
 
 ```bash
-nglimit --doctor
+vimit --doctor
 ```
 
 Example output:
 
 ```
-nglimit doctor — system diagnostics
+vimit doctor — system diagnostics
 
-  [✓] config.toml found: /home/user/.config/nglimit/config.toml
+  [✓] config.toml found: /home/user/.config/vimit/config.toml
   [✓] config.toml is valid TOML
   [✓] accounts.toml: 2 account(s): dev, prod
 
@@ -162,7 +162,7 @@ nglimit doctor — system diagnostics
        NEUROGATE_API_BASE: (not set, will use default)
        NEUROGATE_API_KEY: (set)
 
-  testing API connection to https://api.neurogate.space... OK (4 window(s))
+  testing API connection to https://r-api.vibemod.pro... OK (4 window(s))
 
   status: all checks passed
 ```
@@ -170,7 +170,7 @@ nglimit doctor — system diagnostics
 ## Interactive Setup
 
 ```bash
-nglimit --init
+vimit --init
 ```
 
 Creates config directory, config.toml with defaults, optionally sets up
@@ -181,79 +181,79 @@ Creates config directory, config.toml with defaults, optionally sets up
 Try without a key or network:
 
 ```bash
-nglimit --demo
-nglimit --demo --json
+vimit --demo
+vimit --demo --json
 ```
 
-Use a real NeuroGate key:
+Use a real VibeMode key:
 
 ```bash
 export NEUROGATE_API_KEY="YOUR_NEUROGATE_API_KEY"
-nglimit
-nglimit --json
-nglimit --with-abtop
+vimit
+vimit --json
+vimit --with-abtop
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:NEUROGATE_API_KEY = "YOUR_NEUROGATE_API_KEY"
-.\nglimit.exe
-.\nglimit.exe --json
+.\vimit.exe
+.\vimit.exe --json
 ```
 
 Mock a saved `/v1/me` payload:
 
 ```bash
-nglimit --mock tests/fixtures/me.json
-nglimit --mock tests/fixtures/me.json --json
+vimit --mock tests/fixtures/me.json
+vimit --mock tests/fixtures/me.json --json
 ```
 
 Watch mode:
 
 ```bash
-nglimit --watch 60 --with-abtop
-nglimit --watch 60 --notify
+vimit --watch 60 --with-abtop
+vimit --watch 60 --notify
 ```
 
 Live monitor:
 
 ```bash
-nglimit --monitor
-nglimit --monitor --watch 10
-nglimit --monitor --with-abtop
-nglimit --monitor --notify
+vimit --monitor
+vimit --monitor --watch 10
+vimit --monitor --with-abtop
+vimit --monitor --notify
 ```
 
 Monitor presets for different terminal sizes:
 
 ```bash
-nglimit --monitor --preset full      # 2-column grid, sparklines (default)
-nglimit --monitor --preset compact   # single-column, gauge + metrics
-nglimit --monitor --preset mini      # one line per window, minimal
+vimit --monitor --preset full      # 2-column grid, sparklines (default)
+vimit --monitor --preset compact   # single-column, gauge + metrics
+vimit --monitor --preset mini      # one line per window, minimal
 ```
 
 Per-window thresholds:
 
 ```bash
-nglimit --monitor --threshold 5h=80:95,7d=90
-nglimit --fail-on warning --threshold 24h=85:98
+vimit --monitor --threshold 5h=80:95,7d=90
+vimit --fail-on warning --threshold 24h=85:98
 ```
 
 Format: `KEY=WARNING[:DANGER]` where KEY is one of `5h`, `24h`, `7d`, `30d`.
 Per-window thresholds override `--warning`/`--danger` for those windows.
 
 In monitor mode, press `r` to refresh immediately and `q` or `Esc` to quit.
-It renders an abtop-style dashboard with NeuroGate quota windows, warning
+It renders an abtop-style dashboard with VibeMode quota windows, warning
 alerts, reset timers, remaining credits/requests, and optional local
 Codex/Claude agent context from `abtop --status-json`.
 
 Desktop notifications:
 
 ```bash
-nglimit --notify
-nglimit --watch 60 --notify
-nglimit --monitor --notify
+vimit --notify
+vimit --watch 60 --notify
+vimit --monitor --notify
 ```
 
 `--notify` sends a local desktop alert when a quota window escalates into
@@ -264,16 +264,16 @@ window reset is silent.
 CI/automation threshold:
 
 ```bash
-nglimit --fail-on warning
-nglimit --fail-on danger --json
-nglimit --warning 80 --danger 95 --fail-on warning
+vimit --fail-on warning
+vimit --fail-on danger --json
+vimit --warning 80 --danger 95 --fail-on warning
 ```
 
 Compact one-line output for widgets/status bars:
 
 ```bash
-nglimit --compact
-nglimit --compact --with-abtop
+vimit --compact
+vimit --compact --with-abtop
 ```
 
 ## Output
@@ -281,7 +281,7 @@ nglimit --compact --with-abtop
 Human output:
 
 ```text
-NeuroGate limits
+VibeMode limits
   5h   warning reset in 2h 30m
        credits  39/50 (78.0%, left 11)
        requests 610/1000 (61.0%, left 390)
@@ -291,7 +291,7 @@ JSON output:
 
 ```json
 {
-  "source": "neurogate",
+  "source": "vibemode",
   "windows": [
     {
       "window": "5h",
@@ -317,25 +317,25 @@ JSON output:
 - `--notify` only passes quota summary text to a local OS notification helper:
   Windows PowerShell toast/fallback popup, macOS `osascript`, or Linux/BSD
   `notify-send`.
-- No telemetry, no external network calls except NeuroGate `/v1/me`.
+- No telemetry, no external network calls except VibeMode `/v1/me`.
 
 ## Configuration
 
 Environment variables:
 
-- `NEUROGATE_API_KEY`: NeuroGate API key.
-- `NEUROGATE_API_BASE`: API base URL, default `https://api.neurogate.space`.
+- `NEUROGATE_API_KEY`: VibeMode API key.
+- `NEUROGATE_API_BASE`: API base URL, default `https://r-api.vibemod.pro`.
 - `ABTOP_BIN`: abtop binary path, default `abtop`.
 
 CLI options:
 
 ```bash
-nglimit --help
+vimit --help
 ```
 
 ## Discussions
 
-Ideas, feature requests, and NeuroGate/Codex/Droid workflow notes are welcome
+Ideas, feature requests, and VibeMode/Codex/Droid workflow notes are welcome
 in GitHub Discussions:
 
 https://github.com/xodapi/neurogate-limit-watch/discussions
@@ -361,7 +361,7 @@ cargo run --locked -- --demo --json
 ## What works
 
 - Native Rust CLI and GUI (build with `--features gui`).
-- NeuroGate `/v1/me` polling with robust schema tolerance.
+- VibeMode `/v1/me` polling with robust schema tolerance.
 - 5h / 24h / 7d / 30d credit and request windows.
 - Human, JSON, and compact output modes with ANSI color coding.
 - Full-screen ratatui monitor with gauges, sparklines, color coding.

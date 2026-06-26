@@ -5,10 +5,11 @@ use std::io::{self, Write};
 use std::thread;
 use std::time::Duration;
 
-use neurogate_limit_watch::{self as ng, VERSION};
+use vimit::{self as ng, VERSION};
 
 use cli::accounts::AccountsConfig;
 use cli::args::{parse_args, Args, FailOn};
+use cli::cache::CacheStore;
 use cli::config::{Config, MergedConfig};
 use cli::monitor::run_monitor;
 use cli::notify::Notifier;
@@ -20,7 +21,7 @@ fn main() {
         Ok(code) => code,
         Err(message) => {
             let message = enhance_error(&message);
-            eprintln!("nglimit: {message}");
+            eprintln!("vimit: {message}");
             2
         }
     };
@@ -54,7 +55,7 @@ fn windows_console_process_count() -> u32 {
 }
 
 fn enhance_error(msg: &str) -> String {
-    if msg.contains("cannot reach NeuroGate API") {
+    if msg.contains("cannot reach VibeMode API") {
         format!("{msg}\n  hint: check your internet connection, VPN, and NEUROGATE_API_BASE")
     } else if msg.contains("cannot read env file") {
         format!("{msg}\n  hint: create a .env file or use --demo")
@@ -69,7 +70,7 @@ fn enhance_error(msg: &str) -> String {
         )
     } else if msg.contains("NEUROGATE_API_KEY is required") {
         format!(
-            "{}\n  hint: set NEUROGATE_API_KEY, use --demo, or run nglimit --init",
+            "{}\n  hint: set NEUROGATE_API_KEY, use --demo, or run vimit --init",
             msg
         )
     } else {
@@ -84,7 +85,7 @@ fn real_main() -> Result<i32, String> {
         return Ok(0);
     }
     if cli_args.version {
-        println!("nglimit {VERSION}");
+        println!("vimit {VERSION}");
         return Ok(0);
     }
 
@@ -94,7 +95,7 @@ fn real_main() -> Result<i32, String> {
     if cli_args.list_accounts {
         let names = accounts.list_names();
         if names.is_empty() {
-            println!("no accounts configured (create ~/.config/nglimit/accounts.toml)");
+            println!("no accounts configured (create ~/.config/vimit/accounts.toml)");
         } else {
             println!("available accounts:");
             for name in &names {
@@ -123,7 +124,10 @@ fn real_main() -> Result<i32, String> {
         }
     }
 
-    let args = merge_args_with_config(cli_args, &merged);
+    let mut args = merge_args_with_config(cli_args, &merged);
+    if args.vpn && args.api_base.is_none() {
+        args.api_base = Some(ng::VPN_API_BASE.to_string());
+    }
 
     if args.trend {
         let store = TrendStore::open_readonly()?;
@@ -136,13 +140,14 @@ fn real_main() -> Result<i32, String> {
                 }
             }
             None => {
-                println!("No trend data found. Run nglimit a few times to collect snapshots.");
+                println!("No trend data found. Run vimit a few times to collect snapshots.");
             }
         }
         return Ok(0);
     }
 
     let trends = TrendStore::open()?;
+    let cache = CacheStore::open()?;
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
     if args.monitor {
@@ -163,12 +168,20 @@ fn real_main() -> Result<i32, String> {
             &account_configs,
             initial_idx,
             trends.as_ref(),
+            cache.as_ref(),
         );
     }
 
     loop {
         let dotenv = load_config(&args)?;
-        let code = run_once(&args, &dotenv, &mut notifier, &http, trends.as_ref())?;
+        let code = run_once(
+            &args,
+            &dotenv,
+            &mut notifier,
+            &http,
+            trends.as_ref(),
+            cache.as_ref(),
+        )?;
         if args.watch == 0 {
             return Ok(code);
         }
@@ -247,6 +260,8 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         list_accounts: args.list_accounts,
         doctor: args.doctor,
         init: args.init,
+        vpn: args.vpn,
+        no_cache: args.no_cache,
         trend: args.trend,
         trend_days: args.trend_days,
         help: args.help,

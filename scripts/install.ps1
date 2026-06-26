@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-    Install nglimit for Windows
+    Install vimit for Windows
 .DESCRIPTION
-    Downloads the latest nglimit binary or builds from source.
+    Downloads the latest vimit binary or builds from source.
     Adds to PATH and creates a default .env config.
 .PARAMETER BuildFromSource
     Build from source using Cargo instead of downloading a release binary.
@@ -15,10 +15,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$InstallDir = "$env:LOCALAPPDATA\nglimit"
+$InstallDir = "$env:LOCALAPPDATA\vimit"
 $BinDir = "$InstallDir\bin"
 
-Write-Host "nglimit installer for Windows" -ForegroundColor Cyan
+Write-Host "vimit installer for Windows" -ForegroundColor Cyan
 Write-Host ""
 
 # Ensure install directory exists
@@ -37,7 +37,7 @@ if ($BuildFromSource) {
     git clone https://github.com/xodapi/neurogate-limit-watch.git $repoDir
     Push-Location $repoDir
     cargo build --release
-    Copy-Item "target\release\nglimit.exe" $BinDir
+    Copy-Item "target\release\vimit.exe" $BinDir
     Pop-Location
     Remove-Item -Recurse -Force $repoDir
 } else {
@@ -49,7 +49,7 @@ if ($BuildFromSource) {
         & $PSCommandPath -BuildFromSource
         return
     }
-    $zipPath = Join-Path $env:TEMP "nglimit.zip"
+    $zipPath = Join-Path $env:TEMP "vimit.zip"
     Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zipPath
     Expand-Archive -Path $zipPath -DestinationPath $BinDir -Force
     Remove-Item $zipPath
@@ -64,35 +64,35 @@ if ($userPath -notlike "*$BinDir*") {
 }
 
 # Create default .env if not present
-$EnvFile = "$env:USERPROFILE\.nglimit\.env"
+$EnvFile = "$env:USERPROFILE\.vimit\.env"
 if (-not (Test-Path $EnvFile)) {
     $envDir = Split-Path $EnvFile
     if (-not (Test-Path $envDir)) { New-Item -ItemType Directory -Path $envDir -Force | Out-Null }
     @"
-# nglimit configuration
+# vimit configuration
 # Get your API key from NeuroGate dashboard
 NEUROGATE_API_KEY=
-NEUROGATE_API_BASE=https://api.neurogate.space
+NEUROGATE_API_BASE=https://api.vibemod.pro
 "@ | Set-Content $EnvFile
     Write-Host "Created default config at $EnvFile" -ForegroundColor Green
     Write-Host "  Edit it and add your NEUROGATE_API_KEY" -ForegroundColor Yellow
 }
 
 # Verify
-$nglimit = Get-Command nglimit -ErrorAction SilentlyContinue
-if ($nglimit) {
+$vimit = Get-Command vimit -ErrorAction SilentlyContinue
+if ($vimit) {
     Write-Host ""
     Write-Host "Installation complete!" -ForegroundColor Green
-    & nglimit --version
+    & vimit --version
     Write-Host ""
     Write-Host "Quick start:" -ForegroundColor Cyan
-    Write-Host "  nglimit --demo              # test with demo data"
-    Write-Host "  nglimit --monitor           # live dashboard"
-    Write-Host "  nglimit --monitor --preset compact  # narrow terminal"
+    Write-Host "  vimit --demo              # test with demo data"
+    Write-Host "  vimit --monitor           # live dashboard"
+    Write-Host "  vimit --monitor --preset compact  # narrow terminal"
 } else {
     Write-Host ""
     Write-Host "Installed to $BinDir" -ForegroundColor Green
     Write-Host "Restart your terminal or run:" -ForegroundColor Yellow
     Write-Host "  `$env:Path += `";$BinDir`""
-    Write-Host "  nglimit --version"
+    Write-Host "  vimit --version"
 }

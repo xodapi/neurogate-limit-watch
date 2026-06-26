@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use neurogate_limit_watch as ng;
+use vimit as ng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertLevel {
@@ -72,7 +72,7 @@ impl Notifier {
             if let Some(message) = next_notification(&mut self.last_levels, window) {
                 if let Err(error) = fire_desktop_notification(&message) {
                     if !self.failure_reported {
-                        eprintln!("nglimit: notification failed (non-fatal): {error}");
+                        eprintln!("vimit: notification failed (non-fatal): {error}");
                         self.failure_reported = true;
                     }
                 }
@@ -101,8 +101,8 @@ fn next_notification(
     }
 
     let title = match level {
-        AlertLevel::Danger => format!("NeuroGate: {} window critical", window.key),
-        AlertLevel::Warning => format!("NeuroGate: {} window high usage", window.key),
+        AlertLevel::Danger => format!("VibeMode: {} window critical", window.key),
+        AlertLevel::Warning => format!("VibeMode: {} window high usage", window.key),
         AlertLevel::Ok => return None,
     };
     Some(NotificationMessage {
@@ -133,7 +133,7 @@ fn recovery_notification(
     Some(NotificationMessage {
         window: window.key.to_string(),
         level: AlertLevel::Ok,
-        title: format!("NeuroGate: {} window recovered", window.key),
+        title: format!("VibeMode: {} window recovered", window.key),
         body: recovery_body(window, &previous),
     })
 }
@@ -173,7 +173,7 @@ try {{
   $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
   $xml.LoadXml("<toast><visual><binding template='ToastGeneric'><text>$xmlTitle</text><text>$xmlBody</text></binding></visual></toast>")
   $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("nglimit").Show($toast)
+  [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("vimit").Show($toast)
 }} catch {{
   try {{
     $icon = if ('{level}' -eq 'danger') {{ 48 }} else {{ 64 }}
@@ -230,14 +230,7 @@ fn fire_desktop_notification(message: &NotificationMessage) -> Result<(), String
         AlertLevel::Ok => "low",
     };
     std::process::Command::new("notify-send")
-        .args([
-            "-a",
-            "nglimit",
-            "-u",
-            urgency,
-            &message.title,
-            &message.body,
-        ])
+        .args(["-a", "vimit", "-u", urgency, &message.title, &message.body])
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("cannot start notify-send: {error}"))

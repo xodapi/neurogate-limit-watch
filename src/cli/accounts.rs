@@ -39,7 +39,7 @@ impl AccountsConfig {
         self.accounts.get(name).cloned().ok_or_else(|| {
             if names.is_empty() {
                 format!(
-                    "account '{name}' not found (no accounts configured; create ~/.config/nglimit/accounts.toml)"
+                    "account '{name}' not found (no accounts configured; create ~/.config/vimit/accounts.toml)"
                 )
             } else {
                 format!(
@@ -60,9 +60,9 @@ impl AccountsConfig {
 fn default_accounts_path() -> Option<PathBuf> {
     let home = dirs_or_default()?;
     let config_dir = if cfg!(windows) {
-        home.join("nglimit")
+        home.join("vimit")
     } else {
-        home.join(".config").join("nglimit")
+        home.join(".config").join("vimit")
     };
     let path = config_dir.join("accounts.toml");
     if path.is_file() {

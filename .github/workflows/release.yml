@@ -19,20 +19,20 @@ jobs:
           - os: ubuntu-latest
             asset: x86_64-unknown-linux-gnu
             archive: tar.gz
-            binary: nglimit
+            binary: vimit
           - os: ubuntu-latest
             asset: aarch64-unknown-linux-gnu
             archive: tar.gz
-            binary: nglimit
+            binary: vimit
             cross: true
           - os: windows-latest
             asset: x86_64-pc-windows-msvc
             archive: zip
-            binary: nglimit.exe
+            binary: vimit.exe
           - os: macos-latest
             asset: aarch64-apple-darwin
             archive: tar.gz
-            binary: nglimit
+            binary: vimit
 
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          name="nglimit-${GITHUB_REF_NAME}-${{ matrix.asset }}"
+          name="vimit-${GITHUB_REF_NAME}-${{ matrix.asset }}"
           mkdir -p "dist/${name}"
           if [ "${{ matrix.cross }}" = "true" ]; then
             cp "target/aarch64-unknown-linux-gnu/release/${{ matrix.binary }}" "dist/${name}/"
@@ -66,7 +66,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $name = "nglimit-${env:GITHUB_REF_NAME}-${{ matrix.asset }}"
+          $name = "vimit-${env:GITHUB_REF_NAME}-${{ matrix.asset }}"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
           Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
           Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/$name/"
@@ -99,7 +99,7 @@ jobs:
           Highlights:
           - Single native binary per platform (Windows, Linux, macOS, ARM).
           - No Python, pip, venv, or runtime package dependencies.
-          - `--demo` works without a NeuroGate key or network.
+          - `--demo` works without a VibeMode key or network.
           - `--monitor` with ratatui TUI: gauges, sparklines, color coding.
           - `--preset full|compact|mini` for different terminal sizes.
           - `--threshold 5h=80:95,7d=90` for per-window alert thresholds.
@@ -111,13 +111,13 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
-              --title "neurogate-limit-watch ${TAG}" \
+              --title "vimit ${TAG}" \
               --notes-file notes.md \
               --latest
           else
             gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
-              --title "neurogate-limit-watch ${TAG}" \
+              --title "vimit ${TAG}" \
               --notes-file notes.md \
               --latest
           fi

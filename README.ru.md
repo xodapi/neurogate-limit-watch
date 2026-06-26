@@ -1,14 +1,14 @@
-# neurogate-limit-watch
+# vimit
 
 [English](README.md) | [Русский](README.ru.md)
 
 [![CI](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/neurogate-limit-watch/actions/workflows/ci.yml)
 
-**nglimit** — один нативный бинарник для мониторинга лимитов NeuroGate в реальном времени.
+**vimit** — один нативный бинарник для мониторинга лимитов VibeMode в реальном времени.
 
 Опрашивает `GET /v1/me`, показывает расход credit/request по окнам (5ч / 24ч / 7д / 30д),
 рисует live TUI-дашборд (или JSON / compact), отправляет desktop-уведомления при
-достижении порогов, поддерживает несколько аккаунтов NeuroGate.
+достижении порогов, поддерживает несколько аккаунтов VibeMode.
 
 Не нужны Python, Node или SDK — только один исполняемый файл.
 
@@ -18,16 +18,16 @@
 
 ```bash
 # Скачайте из релизов, затем:
-nglimit --demo                # попробовать без API-ключа
-nglimit --demo --monitor      # полноэкранный дашборд
-nglimit --init                # интерактивный мастер настройки
-nglimit                       # реальные лимиты NeuroGate
-nglimit --doctor              # диагностика системы
+vimit --demo                # попробовать без API-ключа
+vimit --demo --monitor      # полноэкранный дашборд
+vimit --init                # интерактивный мастер настройки
+vimit                       # реальные лимиты VibeMode
+vimit --doctor              # диагностика системы
 ```
 
 ## Зачем
 
-Пользователю NeuroGate полезно заранее понимать, можно ли спокойно продолжать
+Пользователю VibeMode полезно заранее понимать, можно ли спокойно продолжать
 сессию Codex/Droid/Claude/Cursor или лимиты уже близко. Проект маленький,
 локальный и не хранит API-ключи, промпты или приватные сообщения.
 
@@ -54,15 +54,15 @@ nglimit --doctor              # диагностика системы
 Проверка здоровья системы:
 
 ```bash
-nglimit --doctor
+vimit --doctor
 ```
 
 Пример вывода:
 
 ```
-nglimit doctor — system diagnostics
+vimit doctor — system diagnostics
 
-  [✓] config.toml found: /home/user/.config/nglimit/config.toml
+  [✓] config.toml found: /home/user/.config/vimit/config.toml
   [✓] config.toml is valid TOML
   [✓] accounts.toml: 2 account(s): dev, prod
 
@@ -71,7 +71,7 @@ nglimit doctor — system diagnostics
        NEUROGATE_API_BASE: (not set, will use default)
        NEUROGATE_API_KEY: (set)
 
-  testing API connection to https://api.neurogate.space... OK (4 window(s))
+  testing API connection to https://r-api.vibemod.pro... OK (4 window(s))
 
   status: all checks passed
 ```
@@ -79,7 +79,7 @@ nglimit doctor — system diagnostics
 ## Интерактивная настройка
 
 ```bash
-nglimit --init
+vimit --init
 ```
 
 Создаёт директорию конфига, `config.toml` с умолчаниями, опционально `.env`
@@ -94,27 +94,27 @@ https://github.com/xodapi/neurogate-limit-watch/releases
 Скачайте архив под свою платформу, распакуйте и запустите:
 
 ```bash
-nglimit --version
-nglimit --demo
-nglimit --demo --monitor
+vimit --version
+vimit --demo
+vimit --demo --monitor
 ```
 
 Windows PowerShell:
 
 ```powershell
-.\nglimit.exe --version
-.\nglimit.exe --demo
-.\nglimit.exe --demo --monitor
+.\vimit.exe --version
+.\vimit.exe --demo
+.\vimit.exe --demo --monitor
 ```
 
-Если запустить `nglimit.exe` двойным кликом из Explorer, Windows-консоль
+Если запустить `vimit.exe` двойным кликом из Explorer, Windows-консоль
 останется открытой после завершения команды. В Windows-архив также входит
-`nglimit-open.cmd` (helper для двойного клика с паузой) и
-`nglimit-monitor.cmd` для прямого запуска live-monitor.
+`vimit-open.cmd` (helper для двойного клика с паузой) и
+`vimit-monitor.cmd` для прямого запуска live-monitor.
 
 ## .env рядом с бинарником
 
-Ключ NeuroGate можно держать в локальном `.env` рядом с `nglimit` или в
+Ключ VibeMode можно держать в локальном `.env` рядом с `vimit` или в
 директории, из которой вы запускаете команду. В релизный архив входит
 `.env.example`.
 
@@ -126,15 +126,15 @@ cp .env.example .env
 
 ```dotenv
 NEUROGATE_API_KEY=YOUR_NEUROGATE_API_KEY
-NEUROGATE_API_BASE=https://api.neurogate.space
+NEUROGATE_API_BASE=https://r-api.vibemod.pro
 ```
 
 После этого:
 
 ```bash
-nglimit
-nglimit --compact
-nglimit --json
+vimit
+vimit --compact
+vimit --json
 ```
 
 Windows PowerShell:
@@ -142,14 +142,14 @@ Windows PowerShell:
 ```powershell
 Copy-Item .env.example .env
 notepad .env
-.\nglimit.exe --compact
+.\vimit.exe --compact
 ```
 
 Порядок поиска:
 
 1. `--env-file <PATH>`
 2. `.env` в текущей директории
-3. `.env` рядом с исполняемым файлом `nglimit`
+3. `.env` рядом с исполняемым файлом `vimit`
 
 Настоящие переменные окружения имеют приоритет над значениями из `.env`.
 
@@ -165,64 +165,64 @@ cargo build --release --locked
 
 Где будет бинарник:
 
-- Windows: `target/release/nglimit.exe`
-- Linux/macOS: `target/release/nglimit`
+- Windows: `target/release/vimit.exe`
+- Linux/macOS: `target/release/vimit`
 
 ## Использование
 
 Проверить без ключа и без сети:
 
 ```bash
-nglimit --demo
-nglimit --demo --json
+vimit --demo
+vimit --demo --json
 ```
 
-С реальным ключом NeuroGate:
+С реальным ключом VibeMode:
 
 ```bash
 export NEUROGATE_API_KEY="YOUR_NEUROGATE_API_KEY"
-nglimit
-nglimit --json
-nglimit --with-abtop
+vimit
+vimit --json
+vimit --with-abtop
 ```
 
 Windows PowerShell:
 
 ```powershell
 $env:NEUROGATE_API_KEY = "YOUR_NEUROGATE_API_KEY"
-.\nglimit.exe
-.\nglimit.exe --json
+.\vimit.exe
+.\vimit.exe --json
 ```
 
 Mock режим (сохранённый payload):
 
 ```bash
-nglimit --mock tests/fixtures/me.json
-nglimit --mock tests/fixtures/me.json --json
+vimit --mock tests/fixtures/me.json
+vimit --mock tests/fixtures/me.json --json
 ```
 
 Watch mode:
 
 ```bash
-nglimit --watch 60 --with-abtop
-nglimit --watch 60 --notify
+vimit --watch 60 --with-abtop
+vimit --watch 60 --notify
 ```
 
 Live-monitor:
 
 ```bash
-nglimit --monitor
-nglimit --monitor --watch 10
-nglimit --monitor --with-abtop
-nglimit --monitor --notify
+vimit --monitor
+vimit --monitor --watch 10
+vimit --monitor --with-abtop
+vimit --monitor --notify
 ```
 
 Пресеты монитора:
 
 ```bash
-nglimit --monitor --preset full      # 2 колонки, sparklines (по умолчанию)
-nglimit --monitor --preset compact   # 1 колонка, индикатор + метрики
-nglimit --monitor --preset mini      # одна строка на окно
+vimit --monitor --preset full      # 2 колонки, sparklines (по умолчанию)
+vimit --monitor --preset compact   # 1 колонка, индикатор + метрики
+vimit --monitor --preset mini      # одна строка на окно
 ```
 
 Управление в TUI: `q`/`Esc` выход, `r` обновить, `?` помощь, `1`-`6` панели,
@@ -231,33 +231,33 @@ nglimit --monitor --preset mini      # одна строка на окно
 Пер-оконные пороги:
 
 ```bash
-nglimit --monitor --threshold 5h=80:95,7d=90
-nglimit --fail-on warning --threshold 24h=85:98
+vimit --monitor --threshold 5h=80:95,7d=90
+vimit --fail-on warning --threshold 24h=85:98
 ```
 
 Desktop-уведомления:
 
 ```bash
-nglimit --notify
-nglimit --watch 60 --notify
-nglimit --monitor --notify
+vimit --notify
+vimit --watch 60 --notify
+vimit --monitor --notify
 ```
 
 CI-интеграция:
 
 ```bash
-nglimit --fail-on warning
-nglimit --fail-on danger --json
-nglimit --warning 80 --danger 95 --fail-on warning
+vimit --fail-on warning
+vimit --fail-on danger --json
+vimit --warning 80 --danger 95 --fail-on warning
 ```
 
 30-дневные тренды:
 
 ```bash
-nglimit --trend
-nglimit --trend --json
-nglimit --trend --days 7
-nglimit --monitor          # нажмите 5 для sparklines трендов
+vimit --trend
+vimit --trend --json
+vimit --trend --days 7
+vimit --monitor          # нажмите 5 для sparklines трендов
 ```
 
 ## Вывод
@@ -265,7 +265,7 @@ nglimit --monitor          # нажмите 5 для sparklines трендов
 Человекочитаемый вывод с ANSI-цветами:
 
 ```text
-NeuroGate limits
+VibeMode limits
   5h   warning reset in 2h 30m  peak 78%
        credits  39/50 (78.0%, left 11)
        requests 610/1000 (61.0%, left 390)
@@ -275,7 +275,7 @@ JSON:
 
 ```json
 {
-  "source": "neurogate",
+  "source": "vibemode",
   "windows": [
     {
       "window": "5h",
@@ -290,12 +290,12 @@ JSON:
 ## Тренды
 
 ```bash
-nglimit --trend
+vimit --trend
 ```
 
 Показывает ежедневную статистику по окнам за последние 30 дней:
 пик max/avg, средний расход credits/requests. Данные хранятся в
-`~/.config/nglimit/trends.redb` (redb — встраиваемая ACID-БД, pure Rust).
+`~/.config/vimit/trends.redb` (redb — встраиваемая ACID-БД, pure Rust).
 
 ## Безопасность
 
@@ -307,25 +307,25 @@ nglimit --trend
   payload без локальных путей, промптов, текста чатов и session ID.
 - `--monitor` не выводит API-ключ в терминал.
 - `--notify` передает только краткую сводку лимита локальному helper-у ОС.
-- Нет телеметрии и внешних сетевых запросов, кроме NeuroGate `/v1/me`.
+- Нет телеметрии и внешних сетевых запросов, кроме VibeMode `/v1/me`.
 
 ## Настройка
 
 Переменные окружения:
 
-- `NEUROGATE_API_KEY`: API-ключ NeuroGate.
-- `NEUROGATE_API_BASE`: API base URL, по умолчанию `https://api.neurogate.space`.
+- `NEUROGATE_API_KEY`: API-ключ VibeMode.
+- `NEUROGATE_API_BASE`: API base URL, по умолчанию `https://r-api.vibemod.pro`.
 - `ABTOP_BIN`: путь к бинарнику abtop, по умолчанию `abtop`.
 
 CLI:
 
 ```bash
-nglimit --help
+vimit --help
 ```
 
 ## Обсуждения
 
-Идеи, предложения и заметки по NeuroGate/Codex/Droid workflow можно оставлять
+Идеи, предложения и заметки по VibeMode/Codex/Droid workflow можно оставлять
 в GitHub Discussions:
 
 https://github.com/xodapi/neurogate-limit-watch/discussions
@@ -351,7 +351,7 @@ cargo run --locked -- --demo --json
 ## Что работает
 
 - Нативный Rust CLI и GUI (`--features gui`).
-- NeuroGate `/v1/me` с устойчивостью к разным схемам ответа.
+- VibeMode `/v1/me` с устойчивостью к разным схемам ответа.
 - Окна 5h / 24h / 7d / 30d credit и request.
 - Human, JSON, compact вывод с ANSI-цветами.
 - Full-screen ratatui monitor с индикаторами, sparklines, цветовыми темами.

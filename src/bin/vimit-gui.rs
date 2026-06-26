@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use neurogate_limit_watch as ng;
+use vimit as ng;
 
 slint::include_modules!();
 
@@ -29,9 +29,9 @@ fn load_gui_accounts() -> (Vec<String>, Vec<GuiAccount>) {
         return (vec![], vec![]);
     };
     let config_dir = if cfg!(windows) {
-        home.join("nglimit")
+        home.join("vimit")
     } else {
-        home.join(".config").join("nglimit")
+        home.join(".config").join("vimit")
     };
     let path = config_dir.join("accounts.toml");
     if !path.is_file() {
@@ -209,9 +209,9 @@ fn apply_dashboard(app: &AppWindow, result: Result<ng::Dashboard, String>) {
             );
         }
         Err(error) => {
-            let msg = if error.contains("NeuroGate /v1/me returned HTTP 401") {
+            let msg = if error.contains("VibeMode /v1/me returned HTTP 401") {
                 "Check your NEUROGATE_API_KEY in .env"
-            } else if error.contains("cannot reach NeuroGate API") {
+            } else if error.contains("cannot reach VibeMode API") {
                 "Check network / NEUROGATE_API_BASE"
             } else if error.contains("NEUROGATE_API_KEY is required") {
                 "Set NEUROGATE_API_KEY or use Demo"
@@ -297,7 +297,7 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
 
 fn gui_load_dotenv() -> Result<HashMap<String, String>, String> {
     ng::load_dotenv_custom(None).or_else(|error| {
-        eprintln!("nglimit-gui: {error}");
+        eprintln!("vimit-gui: {error}");
         Ok(HashMap::new())
     })
 }
@@ -324,7 +324,7 @@ fn load_dashboard(
     } else {
         (
             http.fetch_me(&config.api_key, &config.api_base)?,
-            format!("источник: live NeuroGate /v1/me на {}", config.api_base),
+            format!("источник: live VibeMode /v1/me на {}", config.api_base),
         )
     };
 

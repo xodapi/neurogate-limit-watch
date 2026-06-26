@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use neurogate_limit_watch::VERSION;
+use vimit::VERSION;
 
 use super::constants;
 use super::theme::Theme;
@@ -49,6 +49,8 @@ pub struct Args {
     pub list_accounts: bool,
     pub doctor: bool,
     pub init: bool,
+    pub vpn: bool,
+    pub no_cache: bool,
     pub trend: bool,
     pub trend_days: u64,
     pub help: bool,
@@ -81,6 +83,8 @@ where
         list_accounts: false,
         doctor: false,
         init: false,
+        vpn: false,
+        no_cache: false,
         trend: false,
         trend_days: 30,
         help: false,
@@ -100,6 +104,8 @@ where
             "--list-accounts" => parsed.list_accounts = true,
             "--doctor" => parsed.doctor = true,
             "--init" => parsed.init = true,
+            "--vpn" => parsed.vpn = true,
+            "--no-cache" => parsed.no_cache = true,
             "--trend" => parsed.trend = true,
             "--days" => {
                 let value = next_value(&mut iter, "--days")?;
@@ -253,16 +259,16 @@ pub fn parse_window_thresholds(value: &str) -> Result<HashMap<String, (f64, f64)
 pub fn print_help() {
     println!(
         "\
-nglimit {VERSION}
+vimit {VERSION}
 
-Safe NeuroGate quota monitor for Codex/Droid workflows.
+Safe VibeMode quota monitor for Codex/Droid workflows.
 
 USAGE:
-  nglimit [OPTIONS]
+  vimit [OPTIONS]
 
 OPTIONS:
       --demo                 Use built-in demo data without a key or network
-      --mock <PATH>          Read a saved /v1/me JSON payload instead of calling NeuroGate
+      --mock <PATH>          Read a saved /v1/me JSON payload instead of calling VibeMode
       --json                 Print machine-readable JSON
       --compact              Print one-line output for widgets/status bars
       --monitor              Full-screen live dashboard, abtop-style
@@ -279,7 +285,7 @@ OPTIONS:
       --threshold <SPEC>     Per-window thresholds, e.g. 5h=80:95,7d=90
                              Format: KEY=WARNING[:DANGER] where KEY is 5h,24h,7d,30d
       --env-file <PATH>      Load .env file explicitly
-      --config <PATH>        Load config file (default: ~/.config/nglimit/config.toml)
+      --config <PATH>        Load config file (default: ~/.config/vimit/config.toml)
       --account <NAME>       Use account profile from accounts.toml
       --list-accounts        List available account profiles
       --doctor               Run system diagnostics
@@ -288,13 +294,14 @@ OPTIONS:
       --days <N>             Days of trend history to show [default: 30]
       --api-base <URL>       API base URL [env: NEUROGATE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: NEUROGATE_API_KEY]
+      --vpn                  Switch to VPN endpoint (api.vibemod.pro)
   -V, --version              Print version
   -h, --help                 Print help
 
 .env lookup:
   1. --env-file <PATH>
   2. .env in the current directory
-  3. .env next to the nglimit executable
+  3. .env next to the vimit executable
 "
     );
 }

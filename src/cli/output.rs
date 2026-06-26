@@ -1,8 +1,9 @@
 use serde_json::Value;
 
-use neurogate_limit_watch as ng;
+use vimit as ng;
 
 use super::args::{FailOn, OutputMode};
+use super::cache::CacheStore;
 use super::trends::TrendStore;
 
 pub fn run_once(
@@ -11,8 +12,9 @@ pub fn run_once(
     notifier: &mut super::notify::Notifier,
     http: &ng::HttpClient,
     trends: Option<&TrendStore>,
+    cache: Option<&CacheStore>,
 ) -> Result<i32, String> {
-    let snapshot = super::monitor::collect_status(args, config, http)?;
+    let snapshot = super::monitor::collect_status(args, config, http, cache)?;
     if let Some(store) = trends {
         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
     }
@@ -56,7 +58,7 @@ fn color_percent(percent: f64) -> String {
 }
 
 pub fn print_human(windows: &[ng::WindowState], abtop: Option<&Value>) {
-    println!("NeuroGate limits");
+    println!("VibeMode limits");
     if windows.is_empty() {
         println!("  usage rows not found in /v1/me response");
     }

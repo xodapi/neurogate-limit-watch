@@ -41,7 +41,7 @@ impl Config {
         if !config_path.is_file() {
             if path.is_some() {
                 return Err(format!(
-                    "config file not found: {}\n  hint: run `nglimit --init` to create one",
+                    "config file not found: {}\n  hint: run `vimit --init` to create one",
                     config_path.display()
                 ));
             }
@@ -140,7 +140,11 @@ pub struct MergedConfig {
 
 fn default_config_path() -> Option<PathBuf> {
     let home = dirs_or_default()?;
-    let config_dir = home.join(".config").join("nglimit");
+    let config_dir = if cfg!(windows) {
+        home.join("vimit")
+    } else {
+        home.join(".config").join("vimit")
+    };
     let config_file = config_dir.join("config.toml");
     if config_file.is_file() {
         Some(config_file)
@@ -154,7 +158,6 @@ pub(crate) fn dirs_or_default() -> Option<PathBuf> {
         std::env::var("APPDATA")
             .ok()
             .map(PathBuf::from)
-            .map(|p| p.join("nglimit"))
             .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
     } else {
         std::env::var("HOME").ok().map(PathBuf::from)

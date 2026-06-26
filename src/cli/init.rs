@@ -5,12 +5,12 @@ use super::config::dirs_or_default;
 pub fn run_init() -> Result<i32, String> {
     let home = dirs_or_default().ok_or_else(|| "cannot determine home directory".to_string())?;
     let config_dir = if cfg!(windows) {
-        home.join("nglimit")
+        home.join("vimit")
     } else {
-        home.join(".config").join("nglimit")
+        home.join(".config").join("vimit")
     };
 
-    println!("nglimit init — interactive setup");
+    println!("vimit init — interactive setup");
     println!();
 
     // Create config directory
@@ -32,7 +32,7 @@ pub fn run_init() -> Result<i32, String> {
             config_file.display()
         );
     } else {
-        let default_config = r#"# nglimit configuration
+        let default_config = r#"# vimit configuration
 # See https://github.com/xodapi/neurogate-limit-watch for docs
 
 # Default thresholds
@@ -76,7 +76,7 @@ pub fn run_init() -> Result<i32, String> {
             let key = key.trim().to_string();
             if !key.is_empty() {
                 let env_content = format!(
-                    "NEUROGATE_API_KEY={key}\n# NEUROGATE_API_BASE=https://api.neurogate.space\n"
+                    "NEUROGATE_API_KEY={key}\n# NEUROGATE_API_BASE=https://r-api.vibemod.pro\n"
                 );
                 std::fs::write(&env_file, env_content)
                     .map_err(|e| format!("cannot write .env: {e}"))?;
@@ -100,27 +100,26 @@ pub fn run_init() -> Result<i32, String> {
 
     println!();
     println!("  setup complete!");
-    println!("  run 'nglimit --monitor' to start the dashboard");
-    println!("  or 'nglimit --doctor' for diagnostics");
+    println!("  run 'vimit --monitor' to start the dashboard");
+    println!("  or 'vimit --doctor' for diagnostics");
     Ok(0)
 }
 
 fn test_connection() -> Result<(), String> {
-    let dotenv = neurogate_limit_watch::load_dotenv_custom(None).unwrap_or_default();
-    let api_key =
-        neurogate_limit_watch::config_value("NEUROGATE_API_KEY", &dotenv).unwrap_or_default();
+    let dotenv = vimit::load_dotenv_custom(None).unwrap_or_default();
+    let api_key = vimit::config_value("NEUROGATE_API_KEY", &dotenv).unwrap_or_default();
     if api_key.is_empty() {
         println!("  skipping connection test: no API key found");
         return Ok(());
     }
-    let api_base = neurogate_limit_watch::config_value("NEUROGATE_API_BASE", &dotenv)
-        .unwrap_or_else(|| neurogate_limit_watch::DEFAULT_API_BASE.to_string());
+    let api_base = vimit::config_value("NEUROGATE_API_BASE", &dotenv)
+        .unwrap_or_else(|| vimit::DEFAULT_API_BASE.to_string());
     print!("  testing {api_base}... ");
     io::stdout().flush().unwrap();
-    let http = neurogate_limit_watch::HttpClient::new(neurogate_limit_watch::USER_AGENT)?;
+    let http = vimit::HttpClient::new(vimit::USER_AGENT)?;
     match http.fetch_me(&api_key, &api_base) {
         Ok(payload) => {
-            let windows = neurogate_limit_watch::summarize_me(&payload, 75.0, 90.0);
+            let windows = vimit::summarize_me(&payload, 75.0, 90.0);
             println!("OK ({} window(s))", windows.len());
             Ok(())
         }

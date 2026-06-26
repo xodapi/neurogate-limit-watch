@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod args;
+pub mod cache;
 pub mod config;
 pub mod constants;
 pub mod doctor;

@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Uninstall nglimit from Windows
+    Uninstall vimit from Windows
 .DESCRIPTION
-    Removes the nglimit binary and optionally the config directory.
+    Removes the vimit binary and optionally the config directory.
 .PARAMETER RemoveConfig
-    Also remove the .nglimit config directory.
+    Also remove the .vimit config directory.
 .EXAMPLE
     .\uninstall.ps1
     .\uninstall.ps1 -RemoveConfig
@@ -14,11 +14,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$InstallDir = "$env:LOCALAPPDATA\nglimit"
+$InstallDir = "$env:LOCALAPPDATA\vimit"
 $BinDir = "$InstallDir\bin"
-$ConfigDir = "$env:USERPROFILE\.nglimit"
+$ConfigDir = "$env:USERPROFILE\.vimit"
 
-Write-Host "nglimit uninstaller" -ForegroundColor Cyan
+Write-Host "vimit uninstaller" -ForegroundColor Cyan
 Write-Host ""
 
 # Remove binary
@@ -49,4 +49,4 @@ if ($RemoveConfig -and (Test-Path $ConfigDir)) {
 }
 
 Write-Host ""
-Write-Host "nglimit uninstalled." -ForegroundColor Green
+Write-Host "vimit uninstalled." -ForegroundColor Green

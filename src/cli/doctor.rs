@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use neurogate_limit_watch as ng;
+use vimit as ng;
 
 use super::accounts::AccountsConfig;
 use super::config::{dirs_or_default, Config};
@@ -8,7 +8,7 @@ use super::config::{dirs_or_default, Config};
 pub fn run_doctor() -> Result<i32, String> {
     let mut ok = true;
 
-    println!("nglimit doctor — system diagnostics");
+    println!("vimit doctor — system diagnostics");
     println!();
 
     // config.toml
@@ -26,11 +26,11 @@ pub fn run_doctor() -> Result<i32, String> {
         }
         Some(p) => {
             println!("  [ ] config.toml not found: {}", p.display());
-            println!("       hint: create with: nglimit init");
+            println!("       hint: create with: vimit init");
         }
         None => {
             println!("  [ ] config.toml: no config directory found");
-            println!("       hint: create with: nglimit init");
+            println!("       hint: create with: vimit init");
         }
     }
 
@@ -111,9 +111,9 @@ pub fn run_doctor() -> Result<i32, String> {
 fn default_config_file_path() -> Option<PathBuf> {
     let home = dirs_or_default()?;
     let config_dir = if cfg!(windows) {
-        home.join("nglimit")
+        home.join("vimit")
     } else {
-        home.join(".config").join("nglimit")
+        home.join(".config").join("vimit")
     };
     Some(config_dir.join("config.toml"))
 }

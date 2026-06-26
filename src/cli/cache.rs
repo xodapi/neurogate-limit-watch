@@ -1,0 +1,136 @@
+use redb::{Database, TableDefinition};
+use serde_json::Value;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+const TABLE: TableDefinition<&[u8], &[u8]> = TableDefinition::new("api_cache");
+const DEFAULT_TTL_SECS: u64 = 30;
+
+pub struct CacheStore {
+    db: Database,
+    ttl: Duration,
+}
+
+impl CacheStore {
+    pub fn open() -> Result<Option<Self>, String> {
+        let path = match default_cache_path() {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("cannot create cache directory: {e}"))?;
+        }
+        let db =
+            Database::create(&path).map_err(|e| format!("cannot create cache database: {e}"))?;
+        let tx = db
+            .begin_write()
+            .map_err(|e| format!("cache write tx failed: {e}"))?;
+        let _ = tx.open_table(TABLE);
+        tx.commit()
+            .map_err(|e| format!("cache commit failed: {e}"))?;
+        Ok(Some(Self {
+            db,
+            ttl: Duration::from_secs(DEFAULT_TTL_SECS),
+        }))
+    }
+
+    #[allow(dead_code)]
+    pub fn set_ttl(&mut self, secs: u64) {
+        self.ttl = Duration::from_secs(secs);
+    }
+
+    pub fn get(&self, api_key: &str, api_base: &str) -> Option<(Value, Instant)> {
+        let key = cache_key(api_key, api_base);
+        let tx = self.db.begin_read().ok()?;
+        let table = tx.open_table(TABLE).ok()?;
+        let entry = table.get(key.as_bytes()).ok()??;
+        let bytes = entry.value();
+        let parsed: Value = serde_json::from_slice(bytes).ok()?;
+        let cached_at_str = parsed.get("cached_at")?.as_str()?;
+        let cached_at_secs: u64 = cached_at_str.parse().ok()?;
+        let now_secs = std::time::UNIX_EPOCH
+            .elapsed()
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let age_secs = now_secs.saturating_sub(cached_at_secs);
+        if Duration::from_secs(age_secs) > self.ttl {
+            return None;
+        }
+        let payload = parsed.get("payload")?.clone();
+        let cached_instant = Instant::now()
+            .checked_sub(Duration::from_secs(age_secs))
+            .unwrap_or(Instant::now());
+        Some((payload, cached_instant))
+    }
+
+    pub fn set(&self, api_key: &str, api_base: &str, payload: &Value) -> Result<(), String> {
+        let key = cache_key(api_key, api_base);
+        let now_secs = std::time::UNIX_EPOCH
+            .elapsed()
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let entry = serde_json::json!({
+            "cached_at": now_secs.to_string(),
+            "payload": payload,
+        });
+        let bytes =
+            serde_json::to_vec(&entry).map_err(|e| format!("cache serialize failed: {e}"))?;
+        let tx = self
+            .db
+            .begin_write()
+            .map_err(|e| format!("cache write tx failed: {e}"))?;
+        {
+            let mut table = tx
+                .open_table(TABLE)
+                .map_err(|e| format!("cache table open failed: {e}"))?;
+            table
+                .insert(key.as_bytes(), bytes.as_slice())
+                .map_err(|e| format!("cache insert failed: {e}"))?;
+        }
+        tx.commit().map_err(|e| format!("cache commit failed: {e}"))
+    }
+
+    pub fn remove(&self, api_key: &str, api_base: &str) -> Result<(), String> {
+        let key = cache_key(api_key, api_base);
+        let tx = self
+            .db
+            .begin_write()
+            .map_err(|e| format!("cache write tx failed: {e}"))?;
+        {
+            let mut table = tx
+                .open_table(TABLE)
+                .map_err(|e| format!("cache table open failed: {e}"))?;
+            table
+                .remove(key.as_bytes())
+                .map_err(|e| format!("cache remove failed: {e}"))?;
+        }
+        tx.commit().map_err(|e| format!("cache commit failed: {e}"))
+    }
+
+    #[allow(dead_code)]
+    pub fn ttl(&self) -> Duration {
+        self.ttl
+    }
+}
+
+fn cache_key(api_key: &str, api_base: &str) -> String {
+    format!("{}|{}", api_key, api_base.trim_end_matches('/'))
+}
+
+fn default_cache_path() -> Option<PathBuf> {
+    let base = if cfg!(target_os = "windows") {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            PathBuf::from(appdata).join("vimit")
+        } else if let Ok(home) = std::env::var("USERPROFILE") {
+            PathBuf::from(home).join("vimit")
+        } else {
+            return None;
+        }
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config").join("vimit")
+    } else {
+        return None;
+    };
+    Some(base.join("cache.redb"))
+}

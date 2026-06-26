@@ -11,13 +11,13 @@ https://github.com/xodapi/neurogate-limit-watch/discussions
 - Per-window thresholds like `5h=80,7d=90`.
 - Monitor presets/layouts for very narrow Droid/Termux terminals.
 - More compact presets for Droid widgets, tmux, and CI logs.
-- Better `/v1/me` schema tolerance when NeuroGate adds new groups or model rows.
+- Better `/v1/me` schema tolerance when VibeMode adds new groups or model rows.
 - PowerShell install script and uninstall script for Windows users.
 
 ## Droid / Termux
 
 - Termux install guide.
-- Termux:Widget example that runs `nglimit --demo` or `nglimit --json`.
+- Termux:Widget example that runs `vimit --demo` or `vimit --json`.
 - Optional Android notification through Termux:API.
 
 ## abtop / Agent Monitoring

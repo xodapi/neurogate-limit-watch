@@ -1,6 +1,6 @@
 # Termux / Android Install Guide
 
-nglimit runs natively on Android via Termux — no root required.
+vimit runs natively on Android via Termux — no root required.
 
 ## Quick Install
 
@@ -13,16 +13,16 @@ cargo install --path .
 git clone https://github.com/xodapi/neurogate-limit-watch.git
 cd neurogate-limit-watch
 cargo build --release
-cp target/release/nglimit ~/.local/bin/
+cp target/release/vimit ~/.local/bin/
 ```
 
 ## Setup .env
 
 ```bash
-mkdir -p ~/.config/nglimit
-cat > ~/.config/nglimit/.env << 'EOF'
+mkdir -p ~/.config/vimit
+cat > ~/.config/vimit/.env << 'EOF'
 NEUROGATE_API_KEY=your_key_here
-NEUROGATE_API_BASE=https://api.neurogate.space
+NEUROGATE_API_BASE=https://api.vibemod.pro
 EOF
 ```
 
@@ -30,31 +30,31 @@ EOF
 
 ```bash
 # One-shot check
-nglimit --compact
+vimit --compact
 
 # Live monitor (compact for narrow terminals)
-nglimit --monitor --preset compact
+vimit --monitor --preset compact
 
 # Widget-friendly output
-nglimit --compact --json
+vimit --compact --json
 
 # Notifications (requires Termux:API)
 pkg install termux-api
-nglimit --notify --watch 30
+vimit --notify --watch 30
 ```
 
 ## Termux:Widget Integration
 
-Create `~/.shortcuts/nglimit.sh`:
+Create `~/.shortcuts/vimit.sh`:
 
 ```bash
 #!/data/data/com.termux/files/usr/bin/bash
-nglimit --compact 2>/dev/null || echo "NG: err"
+vimit --compact 2>/dev/null || echo "NG: err"
 ```
 
 Make executable:
 ```bash
-chmod +x ~/.shortcuts/nglimit.sh
+chmod +x ~/.shortcuts/vimit.sh
 ```
 
 Add the Termux:Widget widget to your home screen.
@@ -63,7 +63,7 @@ Add the Termux:Widget widget to your home screen.
 
 ```bash
 # Stricter on 5h window, relaxed on 30d
-nglimit --monitor --threshold 5h=80:95,30d=85:98
+vimit --monitor --threshold 5h=80:95,30d=85:98
 ```
 
 ## Troubleshooting

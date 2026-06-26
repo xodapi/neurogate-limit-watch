@@ -1,6 +1,6 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-"%~dp0nglimit.exe" %*
+"%~dp0vimit.exe" --monitor %*
 echo.
 pause
