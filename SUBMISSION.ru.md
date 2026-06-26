@@ -28,7 +28,7 @@ https://github.com/xodapi/vimit/discussions
 
 Бонус для новых пользователей VibeMode:
 Регистрация по ссылке дает новому пользователю $5 на счет:
-https://portal.vibemod.pro/invite?ref=cbvBMDP06DSwPL9u
+https://portal.vibemod.pro/?ref=cbvBMDP06DSwPL9u
 
 Как запустить:
 Скачать архив под свою ОС из GitHub Releases, распаковать и выполнить:

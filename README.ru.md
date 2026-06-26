@@ -12,8 +12,6 @@
 
 Не нужны Python, Node или SDK — только один исполняемый файл.
 
-![demo](assets/demo.svg)
-
 ## Быстрый старт
 
 ```bash
@@ -125,8 +123,8 @@ cp .env.example .env
 Отредактируйте `.env`:
 
 ```dotenv
-NEUROGATE_API_KEY=YOUR_NEUROGATE_API_KEY
-NEUROGATE_API_BASE=https://r-api.vibemod.pro
+VIBEMODE_API_KEY=YOUR_VIBEMODE_API_KEY
+VIBEMODE_API_BASE=https://r-api.vibemod.pro
 ```
 
 После этого:
@@ -180,7 +178,7 @@ vimit --demo --json
 С реальным ключом VibeMode:
 
 ```bash
-export NEUROGATE_API_KEY="YOUR_NEUROGATE_API_KEY"
+export VIBEMODE_API_KEY="YOUR_VIBEMODE_API_KEY"
 vimit
 vimit --json
 vimit --with-abtop
@@ -189,7 +187,7 @@ vimit --with-abtop
 Windows PowerShell:
 
 ```powershell
-$env:NEUROGATE_API_KEY = "YOUR_NEUROGATE_API_KEY"
+$env:VIBEMODE_API_KEY = "YOUR_VIBEMODE_API_KEY"
 .\vimit.exe
 .\vimit.exe --json
 ```
@@ -299,7 +297,7 @@ vimit --trend
 
 ## Безопасность
 
-- API-ключ читается только из переменной окружения `NEUROGATE_API_KEY`.
+- API-ключ читается из переменной окружения `VIBEMODE_API_KEY` (поддержка `NEUROGATE_API_KEY` сохранена для обратной совместимости).
 - Ключ не записывается на диск.
 - Ошибки не печатают ключ.
 - JSON-вывод не содержит identity-поля аккаунта.
@@ -313,8 +311,8 @@ vimit --trend
 
 Переменные окружения:
 
-- `NEUROGATE_API_KEY`: API-ключ VibeMode.
-- `NEUROGATE_API_BASE`: API base URL, по умолчанию `https://r-api.vibemod.pro`.
+- `VIBEMODE_API_KEY`: API-ключ VibeMode (фолбек: `NEUROGATE_API_KEY`).
+- `VIBEMODE_API_BASE`: API base URL, по умолчанию `https://r-api.vibemod.pro` (фолбек: `NEUROGATE_API_BASE`).
 - `ABTOP_BIN`: путь к бинарнику abtop, по умолчанию `abtop`.
 
 CLI:

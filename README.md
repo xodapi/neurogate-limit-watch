@@ -12,8 +12,6 @@ notifications on threshold breach, and supports multiple VibeMode accounts.
 
 No Python, Node, or SDK dependencies — just one executable.
 
-![demo](assets/demo.svg)
-
 ## Quick Start
 
 ```bash
@@ -89,8 +87,8 @@ cp .env.example .env
 Edit `.env`:
 
 ```dotenv
-NEUROGATE_API_KEY=YOUR_NEUROGATE_API_KEY
-NEUROGATE_API_BASE=https://r-api.vibemod.pro
+VIBEMODE_API_KEY=YOUR_VIBEMODE_API_KEY
+VIBEMODE_API_BASE=https://r-api.vibemod.pro
 ```
 
 Then run:
@@ -188,7 +186,7 @@ vimit --demo --json
 Use a real VibeMode key:
 
 ```bash
-export NEUROGATE_API_KEY="YOUR_NEUROGATE_API_KEY"
+export VIBEMODE_API_KEY="YOUR_VIBEMODE_API_KEY"
 vimit
 vimit --json
 vimit --with-abtop
@@ -197,7 +195,7 @@ vimit --with-abtop
 Windows PowerShell:
 
 ```powershell
-$env:NEUROGATE_API_KEY = "YOUR_NEUROGATE_API_KEY"
+$env:VIBEMODE_API_KEY = "YOUR_VIBEMODE_API_KEY"
 .\vimit.exe
 .\vimit.exe --json
 ```
@@ -305,7 +303,7 @@ JSON output:
 
 ## Safety
 
-- API key is read only from the environment variable `NEUROGATE_API_KEY`.
+- API key is read from the environment variable `VIBEMODE_API_KEY` (with `NEUROGATE_API_KEY` supported as a fallback).
 - The key is never written to disk.
 - Errors do not print the key.
 - JSON output intentionally omits account identity fields.
@@ -323,8 +321,8 @@ JSON output:
 
 Environment variables:
 
-- `NEUROGATE_API_KEY`: VibeMode API key.
-- `NEUROGATE_API_BASE`: API base URL, default `https://r-api.vibemod.pro`.
+- `VIBEMODE_API_KEY`: VibeMode API key (fallback: `NEUROGATE_API_KEY`).
+- `VIBEMODE_API_BASE`: API base URL, default `https://r-api.vibemod.pro` (fallback: `NEUROGATE_API_BASE`).
 - `ABTOP_BIN`: abtop binary path, default `abtop`.
 
 CLI options:
