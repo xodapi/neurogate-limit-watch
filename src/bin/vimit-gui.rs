@@ -305,15 +305,20 @@ fn main() {
             if let Ok(updater) = builder.build() {
                 match updater.get_latest_release() {
                     Ok(latest) => {
-                        let is_greater = self_update::version::bump_is_greater(current_version, &latest.version)
-                            .unwrap_or(false);
+                        let is_greater =
+                            self_update::version::bump_is_greater(current_version, &latest.version)
+                                .unwrap_or(false);
                         let _ = weak_clone.upgrade_in_event_loop(move |app| {
                             if is_greater {
                                 app.set_new_version_label(latest.version.clone().into());
-                                app.set_status_text(format!("Доступно обновление: v{}", latest.version).into());
+                                app.set_status_text(
+                                    format!("Доступно обновление: v{}", latest.version).into(),
+                                );
                             } else {
                                 app.set_new_version_label("".into());
-                                app.set_status_text(format!("У вас последняя версия v{}", current_version).into());
+                                app.set_status_text(
+                                    format!("У вас последняя версия v{}", current_version).into(),
+                                );
                             }
                         });
                     }
@@ -382,7 +387,10 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
                 "ok" => "✅",
                 _ => "⚪",
             };
-            tooltip_parts.push(format!("{}: {} {} ({:.1}%)", w.key, level_emoji, w.level, w.percent));
+            tooltip_parts.push(format!(
+                "{}: {} {} ({:.1}%)",
+                w.key, level_emoji, w.level, w.percent
+            ));
         }
         let tooltip_text = if tooltip_parts.is_empty() {
             "VibeMode Control".to_string()
