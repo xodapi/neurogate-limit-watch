@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 use std::env;
 #[cfg(windows)]
 use std::io::{self, Write};

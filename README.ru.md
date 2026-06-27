@@ -5,7 +5,7 @@
 [![CI](https://github.com/xodapi/vimit/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/xodapi/vimit.svg?style=flat-square)](https://github.com/xodapi/vimit/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-2021-orange.svg?style=flat-square)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-2024-orange.svg?style=flat-square)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](https://github.com/xodapi/vimit)
 [![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
@@ -36,25 +36,25 @@ vimit --doctor              # диагностика системы
 
 ## Возможности
 
-- **Автообновления** (`vimit update`): нативная проверка и установка обновлений CLI & GUI напрямую из GitHub Releases
-- **Отказоустойчивый роутер**: автоматический ретрай и failover между роутерами API с отображением статуса активного подключения (`api`/`r-api`)
-- **Спарклайны трендов**: визуализация 15-дневной истории использования лимитов прямо внутри GUI
-- **Скрытый режим (Stealth Mode)**: скрытие точных числовых значений расходов с заменой на `***` в GUI
-- **Несколько режимов вывода**: human, JSON (`--json`), compact одной строкой (`--compact`)
-- **Live TUI-монитор** (`--monitor`): ratatui-дашборд с индикаторами, sparkline, цветовыми темами
-- **Пресеты монитора**: `full` (сетка 2 колонки), `compact` (одна колонка), `mini` (одна строка)
-- **12 цветовых тем**: btop, dracula, catppuccin, tokyo-night, gruvbox, nord, high-contrast, protanopia, deuteranopia, tritanopia, solarized, monokai
-- **Несколько аккаунтов**: `accounts.toml`, переключение по Tab в TUI, выпадающий список в GUI
-- **Desktop-уведомления** (`--notify`): оповещение при warning/danger, без повторов
-- **Свои пороги** (`--warning`, `--danger`, `--threshold`): для каждого окна отдельно
-- **CI-интеграция** (`--fail-on`): ненулевой exit code при превышении порога
-- **Watch mode** (`--watch N`): периодический опрос каждые N секунд
-- **abtop-интеграция** (`--with-abtop`): статус локальных Codex/Claude-агентов
-- **Диагностика** (`--doctor`): проверка конфига, аккаунтов, env, API
-- **Мастер установки** (`--init`): интерактивное создание конфига, .env и API-ключа
-- **30-дневные тренды** (`--trend`): история использования в redb, sparklines в TUI
-- **GUI** (`--features gui`): desktop-окно на Slint со скрытым режимом, баджем роутера и графиками трендов
-- **Безопасно**: API-ключ только из env, не логируется, нет телеметрии
+- **Автообновления** (`vimit update`): нативная проверка и установка обновлений CLI & GUI напрямую из GitHub Releases. В GUI добавлена секция настроек с кнопкой ручной проверки и переключателем авто-проверки.
+- **Отказоустойчивый роутер**: автоматический ретрай и failover между роутерами API с отображением статуса активного подключения (`api`/`r-api`).
+- **Спарклайны трендов**: визуализация 15-дневной истории использования лимитов прямо внутри GUI.
+- **Скрытый режим (Stealth Mode)**: скрытие точных числовых значений расходов с заменой на `***` в GUI.
+- **Несколько режимов вывода**: human, JSON (`--json`), compact одной строкой (`--compact`).
+- **Live TUI-монитор** (`--monitor`): ratatui-дашборд с индикаторами, sparkline, цветовыми темами.
+- **Пресеты монитора**: `full` (сетка 2 колонки), `compact` (одна колонка), `mini` (одна строка).
+- **12 цветовых тем**: btop, dracula, catppuccin, tokyo-night, gruvbox, nord, high-contrast, protanopia, deuteranopia, tritanopia, solarized, monokai.
+- **Несколько аккаунтов**: `accounts.toml`, переключение по Tab в TUI, выпадающий список в GUI.
+- **Desktop-уведомления** (`--notify`): оповещение при warning/danger, без повторов.
+- **Свои пороги** (`--warning`, `--danger`, `--threshold`): для каждого окна отдельно.
+- **CI-интеграция** (`--fail-on`): ненулевой exit code при превышении порога.
+- **Watch mode** (`--watch N`): периодический опрос каждые N секунд.
+- **abtop-интеграция** (`--with-abtop`): статус локальных Codex/Claude-агентов.
+- **Диагностика** (`--doctor`): проверка конфига, аккаунтов, env, API.
+- **Мастер установки** (`--init`): интерактивное создание конфига, .env и API-ключа.
+- **30-дневные тренды** (`--trend`): история использования в redb, sparklines в TUI.
+- **GUI** (`--features gui`): desktop-приложение на Slint с графиками трендов, информативным тултипом в системном трее (с точным расходом квоты в процентах на mouse hover), полноценной иконкой приложения на панели задач Windows и разделом управления обновлениями в настройках.
+- **Безопасно**: API-ключ только из env, не логируется, нет телеметрии.
 
 ## Диагностика
 
@@ -101,7 +101,12 @@ vimit update --check   # Проверить наличие новой верси
 vimit update           # Автоматически скачать и установить последнюю версию
 ```
 
-Фоновая проверка выполняется автоматически при запуске TUI и GUI. Результаты кэшируются на 24 часа в файле `~/.config/vimit/state.json`, чтобы избежать блокировок со стороны лимитов GitHub API.
+Фоновая проверка выполняется автоматически при запуске TUI и GUI (если включена). Результаты кэшируются на 24 часа в файле `~/.config/vimit/state.json`, чтобы избежать блокировок со стороны лимитов GitHub API.
+
+В GUI-версии добавлена панель управления обновлениями в настройках:
+- Кнопка **"Проверить сейчас"** для мгновенного поиска релизов.
+- Чекбокс **"Авто-проверка"** для включения/выключения фонового поиска при старте (настройка сохраняется в `state.json`).
+- Оранжевый бадж **"Update Available"** в шапке окна, если доступна новая версия.
 
 ## Скачать
 

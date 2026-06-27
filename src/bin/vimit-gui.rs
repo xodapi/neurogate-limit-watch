@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -14,7 +16,7 @@ use vimit as ng;
 slint::include_modules!();
 
 thread_local! {
-    static TRAY_ICON: RefCell<Option<TrayIcon>> = RefCell::new(None);
+    static TRAY_ICON: RefCell<Option<TrayIcon>> = const { RefCell::new(None) };
 }
 
 fn create_status_icon(color: (u8, u8, u8)) -> Icon {
@@ -150,28 +152,24 @@ fn main() {
     let show_id_clone = show_id.clone();
     let quit_id_clone = quit_id.clone();
     tray_timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
-        if let Ok(event) = MenuEvent::receiver().try_recv() {
-            if let Some(app) = weak.upgrade() {
-                if event.id == show_id_clone {
-                    let _ = app.show();
-                } else if event.id == quit_id_clone {
-                    let _ = slint::quit_event_loop();
-                }
+        if let (Ok(event), Some(app)) = (MenuEvent::receiver().try_recv(), weak.upgrade()) {
+            if event.id == show_id_clone {
+                let _ = app.show();
+            } else if event.id == quit_id_clone {
+                let _ = slint::quit_event_loop();
             }
         }
-        if let Ok(event) = TrayIconEvent::receiver().try_recv() {
-            if let Some(app) = weak.upgrade() {
-                match event {
-                    TrayIconEvent::Click { button, .. } => {
-                        if button == MouseButton::Left {
-                            let _ = app.show();
-                        }
-                    }
-                    TrayIconEvent::DoubleClick { .. } => {
+        if let (Ok(event), Some(app)) = (TrayIconEvent::receiver().try_recv(), weak.upgrade()) {
+            match event {
+                TrayIconEvent::Click { button, .. } => {
+                    if button == MouseButton::Left {
                         let _ = app.show();
                     }
-                    _ => {}
                 }
+                TrayIconEvent::DoubleClick { .. } => {
+                    let _ = app.show();
+                }
+                _ => {}
             }
         }
     });
@@ -357,9 +355,8 @@ fn start_refresh(
         });
     });
 }
-
 fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) {
-    if let Some(ref res) = result.as_ref().ok() {
+    if let Ok(res) = result.as_ref() {
         let max_percent = res
             .dashboard
             .windows

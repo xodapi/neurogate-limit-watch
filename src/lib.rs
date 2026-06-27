@@ -1,3 +1,5 @@
+#![allow(clippy::collapsible_if)]
+
 pub mod cli;
 
 use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
@@ -149,10 +151,8 @@ impl RuntimeConfig {
         api_key_env: &str,
         env_file: Option<&PathBuf>,
     ) -> Result<Self, String> {
-        if let Some(path) = env_file {
-            if !path.is_file() {
-                return Err(format!("env file not found: {}", path.display()));
-            }
+        if let Some(path) = env_file.filter(|p| !p.is_file()) {
+            return Err(format!("env file not found: {}", path.display()));
         }
         let dotenv = load_dotenv_custom(env_file)?;
         Ok(Self {
@@ -531,14 +531,13 @@ fn summarize_metric(
         }
         seen = true;
         used_total += used.unwrap_or(0.0);
-        if let Some(limit) = limit {
-            if limit > 0.0
+        if let Some(limit) = limit.filter(|&limit| {
+            limit > 0.0
                 && !limits
                     .iter()
                     .any(|existing| (*existing - limit).abs() < f64::EPSILON)
-            {
-                limits.push(limit);
-            }
+        }) {
+            limits.push(limit);
         }
     }
 
@@ -1001,13 +1000,12 @@ pub fn find_dotenv_custom(explicit: Option<&PathBuf>) -> Option<PathBuf> {
         return Some(cwd_env);
     }
 
-    if let Ok(exe) = env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let exe_env = dir.join(".env");
-            if exe_env.is_file() {
-                return Some(exe_env);
-            }
-        }
+    if let Some(exe_env) = env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(".env")))
+        .filter(|exe_env| exe_env.is_file())
+    {
+        return Some(exe_env);
     }
     None
 }

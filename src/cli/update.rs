@@ -142,10 +142,8 @@ pub fn start_background_check() {
             .as_secs();
 
         // 24 hours = 86400 seconds
-        if let Some(last_check) = state.last_update_check {
-            if now >= last_check && now - last_check < 86400 {
-                return;
-            }
+        if state.last_update_check.filter(|&last_check| now >= last_check && now - last_check < 86400).is_some() {
+            return;
         }
 
         // Query github release
@@ -156,18 +154,16 @@ pub fn start_background_check() {
             .bin_name("vimit")
             .current_version(current_version);
 
-        if let Ok(updater) = builder.build() {
-            if let Ok(latest) = updater.get_latest_release() {
-                state.last_update_check = Some(now);
-                if self_update::version::bump_is_greater(current_version, &latest.version)
-                    .unwrap_or(false)
-                {
-                    state.latest_available_version = Some(latest.version);
-                } else {
-                    state.latest_available_version = None;
-                }
-                save_state(&state);
+        if let Ok(latest) = builder.build().and_then(|updater| updater.get_latest_release()) {
+            state.last_update_check = Some(now);
+            if self_update::version::bump_is_greater(current_version, &latest.version)
+                .unwrap_or(false)
+            {
+                state.latest_available_version = Some(latest.version);
+            } else {
+                state.latest_available_version = None;
             }
+            save_state(&state);
         }
     });
 }
@@ -175,10 +171,10 @@ pub fn start_background_check() {
 pub fn latest_checked_version() -> Option<String> {
     let current_version = cargo_crate_version!();
     let state = load_state();
-    if let Some(ver) = state.latest_available_version {
-        if self_update::version::bump_is_greater(current_version, &ver).unwrap_or(false) {
-            return Some(ver);
-        }
+    if let Some(ver) = state.latest_available_version.filter(|ver| {
+        self_update::version::bump_is_greater(current_version, ver).unwrap_or(false)
+    }) {
+        return Some(ver);
     }
     None
 }

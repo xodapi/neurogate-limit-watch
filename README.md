@@ -5,7 +5,7 @@
 [![CI](https://github.com/xodapi/vimit/actions/workflows/ci.yml/badge.svg)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 [![Stars](https://img.shields.io/github/stars/xodapi/vimit.svg?style=flat-square)](https://github.com/xodapi/vimit/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-2021-orange.svg?style=flat-square)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-2024-orange.svg?style=flat-square)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](https://github.com/xodapi/vimit)
 [![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
@@ -37,24 +37,24 @@ private prompts.
 
 ## Features
 
-- **Self-updates** (`vimit update`): check and update the CLI & GUI natively using GitHub Releases
-- **Active endpoint failover**: automatically failover between API routers, displaying an active connection badge (`api`/`r-api`)
-- **Trend sparklines**: 15-day usage graphs rendered inside GUI quota cards
-- **Stealth Mode**: mask sensitive numeric values with `***` in the GUI
-- **Multiple output modes**: human, JSON (`--json`), compact one-line (`--compact`)
-- **Live TUI monitor** (`--monitor`): ratatui dashboard with gauges, sparklines, color themes
-- **Monitor presets**: `full` (2-column grid), `compact` (single-column), `mini` (one-liner)
-- **12 color themes**: btop, dracula, catppuccin, tokyo-night, gruvbox, nord, high-contrast, protanopia, deuteranopia, tritanopia, solarized, monokai
-- **Multi-account**: `accounts.toml` profiles, Tab switching in TUI, dropdown in GUI
-- **Desktop notifications** (`--notify`): alert on warning/danger, no-repeat logic
-- **Custom thresholds** (`--warning`, `--danger`, `--threshold`): per-window warning/danger levels
-- **CI integration** (`--fail-on`): exit non-zero when threshold is breached
-- **Watch mode** (`--watch N`): periodic polling every N seconds
-- **abtop integration** (`--with-abtop`): merge local Codex/Claude agent status
-- **Diagnostics** (`--doctor`): validate config, accounts, env, API connectivity
-- **Setup wizard** (`--init`): interactive config, .env, and API key setup
-- **GUI** (`--features gui`): Slint-based desktop window with stealth toggle and sparklines
-- **Safe by design**: API key from env only, never logged, no telemetry
+- **Self-updates** (`vimit update`): check and update the CLI & GUI natively using GitHub Releases. The GUI includes a dedicated Updates section with a Check Now button and an Auto-check toggle.
+- **Active endpoint failover**: automatically failover between API routers, displaying an active connection badge (`api`/`r-api`).
+- **Trend sparklines**: 15-day usage graphs rendered inside GUI quota cards.
+- **Stealth Mode**: mask sensitive numeric values with `***` in the GUI.
+- **Multiple output modes**: human, JSON (`--json`), compact one-line (`--compact`).
+- **Live TUI monitor** (`--monitor`): ratatui dashboard with gauges, sparklines, color themes.
+- **Monitor presets**: `full` (2-column grid), `compact` (single-column), `mini` (one-liner).
+- **12 color themes**: btop, dracula, catppuccin, tokyo-night, gruvbox, nord, high-contrast, protanopia, deuteranopia, tritanopia, solarized, monokai.
+- **Multi-account**: `accounts.toml` profiles, Tab switching in TUI, dropdown in GUI.
+- **Desktop notifications** (`--notify`): alert on warning/danger, no-repeat logic.
+- **Custom thresholds** (`--warning`, `--danger`, `--threshold`): per-window warning/danger levels.
+- **CI integration** (`--fail-on`): exit non-zero when threshold is breached.
+- **Watch mode** (`--watch N`): periodic polling every N seconds.
+- **abtop integration** (`--with-abtop`): merge local Codex/Claude agent status.
+- **Diagnostics** (`--doctor`): validate config, accounts, env, API connectivity.
+- **Setup wizard** (`--init`): interactive config, .env, and API key setup.
+- **GUI** (`--features gui`): Slint-based desktop window with stealth toggle, sparklines, informative system tray tooltip with exact usage percentages on hover, proper taskbar application icon on Windows, and updates configuration panel.
+- **Safe by design**: API key from env only, never logged, no telemetry.
 
 ## Download
 
@@ -192,7 +192,12 @@ vimit update --check   # Check if a new version is available
 vimit update           # Automatically download and install the latest release
 ```
 
-Background checking is performed automatically in the background on TUI and GUI startup. To avoid GitHub API rate limits, checks are cached for 24 hours in `~/.config/vimit/state.json`.
+Background checking is performed automatically in the background on TUI and GUI startup (if enabled). To avoid GitHub API rate limits, checks are cached for 24 hours in `~/.config/vimit/state.json`.
+
+In the GUI, a dedicated Updates section has been added to the settings panel:
+- **Check Now** button to trigger an immediate check.
+- **Auto-check** toggle (On/Off) to enable or disable automatic startup checks (setting is persisted in `state.json`).
+- Orange **"Update Available"** badge next to the router status in the window header when a newer version is found.
 
 ## Usage
 
