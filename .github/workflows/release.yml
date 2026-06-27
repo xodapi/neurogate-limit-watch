@@ -124,12 +124,16 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --title "vimit ${TAG}" \
               --notes-file notes.md \
+              --draft=false \
+              --prerelease=false \
               --latest
           else
             gh release create "$TAG" \
               --repo "$GITHUB_REPOSITORY" \
               --title "vimit ${TAG}" \
               --notes-file notes.md \
+              --draft=false \
+              --prerelease=false \
               --latest
           fi
           while IFS= read -r -d '' file; do
