@@ -65,11 +65,7 @@ fn default_accounts_path() -> Option<PathBuf> {
         home.join(".config").join("vimit")
     };
     let path = config_dir.join("accounts.toml");
-    if path.is_file() {
-        Some(path)
-    } else {
-        None
-    }
+    if path.is_file() { Some(path) } else { None }
 }
 
 #[cfg(test)]

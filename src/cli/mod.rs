@@ -10,3 +10,4 @@ pub mod notify;
 pub mod output;
 pub mod theme;
 pub mod trends;
+pub mod update;

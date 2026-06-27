@@ -28,6 +28,8 @@ component LimitCard inherits Rectangle {
     in property <float> percent;
     in property <float> credit-percent;
     in property <float> request-percent;
+    in property <[float]> trend-data;
+    in property <bool> stealth-mode;
 
     in property <bool> dimmed;
 
@@ -38,13 +40,14 @@ component LimitCard inherits Rectangle {
     border-color: root.dimmed ? #252c36 : #334052;
     border-width: 1px;
     border-radius: 8px;
-    min-height: 170px;
+    min-height: 195px;
 
     VerticalLayout {
         padding: 12px;
         spacing: 6px;
 
         HorizontalLayout {
+            padding-bottom: 2px;
             Text {
                 text: root.name;
                 color: #f2f4f8;
@@ -74,6 +77,20 @@ component LimitCard inherits Rectangle {
         MeterBar {
             value: root.percent;
             fill: root.accent;
+        }
+
+        if (root.trend-data.length > 0) : HorizontalLayout {
+            height: 20px;
+            spacing: 2px;
+            alignment: center;
+            for val in root.trend-data : Rectangle {
+                background: val >= 90 ? #d66f73 : val >= 75 ? #caa45f : #78ad84;
+                opacity: 0.6;
+                width: 4px;
+                height: max(2px, parent.height * val / 100);
+                y: parent.height - self.height;
+                border-radius: 1px;
+            }
         }
 
         Text {
@@ -130,13 +147,13 @@ component LimitCard inherits Rectangle {
         }
 
         Text {
-            text: root.credits;
+            text: root.stealth-mode ? "кредиты: ***" : root.credits;
             color: #c9d0de;
             font-size: 12px;
         }
 
         Text {
-            text: root.requests;
+            text: root.stealth-mode ? "запросы: ***" : root.requests;
             color: #c9d0de;
             font-size: 12px;
         }
@@ -212,9 +229,20 @@ export component AppWindow inherits Window {
     callback demo-requested();
     callback settings-changed(float, float);
     callback account-changed(string);
+    callback check-updates();
+    callback auto-update-changed(bool);
 
     in-out property <[string]> account-names: [];
     in-out property <string> current-account: "";
+
+    in property <[float]> five-trend-data: [];
+    in property <[float]> day-trend-data: [];
+    in property <[float]> week-trend-data: [];
+    in property <[float]> month-trend-data: [];
+    in-out property <bool> stealth-mode: false;
+    in property <string> active-endpoint-label: "";
+    in property <string> new-version-label: "";
+    in-out property <bool> auto-update-check: true;
 
     in property <string> status-text: "Запуск...";
     in property <string> source-text: "источник: загрузка";
@@ -290,11 +318,45 @@ export component AppWindow inherits Window {
                     VerticalLayout {
                         spacing: 10px;
 
-                        Text {
-                            text: "VibeMode Control";
-                            color: #f5f7fb;
-                            font-size: 28px;
-                            font-weight: 800;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+                            Text {
+                                text: "VibeMode Control";
+                                color: #f5f7fb;
+                                font-size: 28px;
+                                font-weight: 800;
+                            }
+                            if (root.active-endpoint-label != "") : Rectangle {
+                                width: 72px;
+                                height: 22px;
+                                y: 6px;
+                                border-radius: 11px;
+                                background: root.active-endpoint-label == "api" ? #caa45f : #78ad84;
+                                Text {
+                                    text: root.active-endpoint-label;
+                                    color: #11141a;
+                                    font-size: 11px;
+                                    font-weight: 800;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if (root.new-version-label != "") : Rectangle {
+                                width: 140px;
+                                height: 22px;
+                                y: 6px;
+                                border-radius: 11px;
+                                background: #d66f73; // light red/orange alert color
+                                Text {
+                                    text: "Обновление: v" + root.new-version-label;
+                                    color: #ffffff;
+                                    font-size: 11px;
+                                    font-weight: 800;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
                         }
 
                         Text {
@@ -378,7 +440,7 @@ export component AppWindow inherits Window {
 
             Rectangle {
                 visible: root.settings-open;
-                height: root.settings-open ? 160px : 0px;
+                height: root.settings-open ? 230px : 0px;
                 background: #151a22;
                 border-radius: 8px;
                 border-color: #2b3444;
@@ -435,6 +497,13 @@ export component AppWindow inherits Window {
                                 clicked => {
                                     root.period-mode = 2;
                                     root.risk-only = false;
+                                }
+                            }
+
+                            Button {
+                                text: root.stealth-mode ? "🔓 Показать" : "🔒 Скрыть";
+                                clicked => {
+                                    root.stealth-mode = !root.stealth-mode;
                                 }
                             }
 
@@ -611,6 +680,53 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
+
+                    Rectangle {
+                        height: 1px;
+                        background: #2c3549;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 20px;
+
+                        VerticalLayout {
+                            width: 220px;
+                            spacing: 4px;
+
+                            Text {
+                                text: "Обновления";
+                                color: #e6edf5;
+                                font-size: 14px;
+                                font-weight: 800;
+                            }
+
+                            Text {
+                                text: "проверка новых версий vimit";
+                                color: #8f9aaa;
+                                font-size: 11px;
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+
+                            Button {
+                                text: "Проверить сейчас";
+                                clicked => {
+                                    root.check-updates();
+                                }
+                            }
+
+                            Button {
+                                text: root.auto-update-check ? "✓ Авто-проверка: ВКЛ" : "✗ Авто-проверка: ВЫКЛ";
+                                clicked => {
+                                    root.auto-update-check = !root.auto-update-check;
+                                    root.auto-update-changed(root.auto-update-check);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -630,6 +746,8 @@ export component AppWindow inherits Window {
                     percent: root.five-percent;
                     credit-percent: root.five-credit-percent;
                     request-percent: root.five-request-percent;
+                    trend-data: root.five-trend-data;
+                    stealth-mode: root.stealth-mode;
                     dimmed: root.period-mode == 2 || (root.risk-only && root.five-percent < 75);
                 }
 
@@ -646,6 +764,8 @@ export component AppWindow inherits Window {
                     percent: root.day-percent;
                     credit-percent: root.day-credit-percent;
                     request-percent: root.day-request-percent;
+                    trend-data: root.day-trend-data;
+                    stealth-mode: root.stealth-mode;
                     dimmed: root.period-mode == 2 || (root.risk-only && root.day-percent < 75);
                 }
 
@@ -662,6 +782,8 @@ export component AppWindow inherits Window {
                     percent: root.week-percent;
                     credit-percent: root.week-credit-percent;
                     request-percent: root.week-request-percent;
+                    trend-data: root.week-trend-data;
+                    stealth-mode: root.stealth-mode;
                     dimmed: root.period-mode == 1 || (root.risk-only && root.week-percent < 75);
                 }
 
@@ -678,6 +800,8 @@ export component AppWindow inherits Window {
                     percent: root.month-percent;
                     credit-percent: root.month-credit-percent;
                     request-percent: root.month-request-percent;
+                    trend-data: root.month-trend-data;
+                    stealth-mode: root.stealth-mode;
                     dimmed: root.period-mode == 1 || (root.risk-only && root.month-percent < 75);
                 }
             }

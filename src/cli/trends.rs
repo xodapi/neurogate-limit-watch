@@ -5,7 +5,7 @@ use chrono::{NaiveDate, Utc};
 use redb::{Database, TableDefinition};
 use serde_json::Value;
 
-use vimit::WindowState;
+use crate::WindowState;
 
 use super::config::dirs_or_default;
 

@@ -1,3 +1,4 @@
+use crate as vimit;
 use std::io::{self, Write};
 
 use super::config::dirs_or_default;

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use vimit as ng;
+use crate as ng;
 
 use super::args::{FailOn, OutputMode};
 use super::cache::CacheStore;
@@ -141,7 +141,9 @@ fn format_agent(agent: &Value) -> String {
         .and_then(ng::to_number)
         .map(|value| format!("{value:.0}%"))
         .unwrap_or_else(|| "n/a".to_string());
-    format!("{agent_cli:<8} sessions {sessions:<2} active {active:<2} ctx max {context} tokens {tokens}")
+    format!(
+        "{agent_cli:<8} sessions {sessions:<2} active {active:<2} ctx max {context} tokens {tokens}"
+    )
 }
 
 fn exit_code(windows: &[ng::WindowState], fail_on: FailOn) -> i32 {

@@ -1,21 +1,19 @@
-mod cli;
-
 use std::env;
 #[cfg(windows)]
 use std::io::{self, Write};
 use std::thread;
 use std::time::Duration;
 
-use vimit::{self as ng, VERSION};
+use vimit::{self as ng, VERSION, cli};
 
 use cli::accounts::AccountsConfig;
-use cli::args::{parse_args, Args, FailOn};
+use cli::args::{Args, FailOn, parse_args};
 use cli::cache::CacheStore;
 use cli::config::{Config, MergedConfig};
 use cli::monitor::run_monitor;
 use cli::notify::Notifier;
 use cli::output::run_once;
-use cli::trends::{print_trends_human, print_trends_json, TrendStore};
+use cli::trends::{TrendStore, print_trends_human, print_trends_json};
 
 fn main() {
     let code = match real_main() {
@@ -47,7 +45,7 @@ fn pause_before_exit_if_own_console() {}
 #[cfg(windows)]
 fn windows_console_process_count() -> u32 {
     #[link(name = "kernel32")]
-    extern "system" {
+    unsafe extern "system" {
         fn GetConsoleProcessList(process_list: *mut u32, process_count: u32) -> u32;
     }
 
@@ -108,6 +106,10 @@ fn real_main() -> Result<i32, String> {
         return Ok(0);
     }
 
+    if cli_args.update {
+        return cli::update::check_and_update(cli_args.update_check).map(|_| 0);
+    }
+
     if cli_args.doctor {
         return cli::doctor::run_doctor();
     }
@@ -157,6 +159,8 @@ fn real_main() -> Result<i32, String> {
         ng::DEFAULT_API_BASE.to_string(),
         vec![ng::VPN_API_BASE.to_string()],
     );
+    cli::update::start_background_check();
+
     if args.monitor {
         let account_names = accounts.list_names();
         let account_configs: Vec<cli::accounts::AccountConfig> = account_names
@@ -191,6 +195,13 @@ fn real_main() -> Result<i32, String> {
             Some(&mut router),
         )?;
         if args.watch == 0 {
+            if let Some(latest) = cli::update::latest_checked_version() {
+                eprintln!();
+                eprintln!(
+                    "⚠️  Доступно обновление vimit: v{}! Запустите `vimit update` для установки.",
+                    latest
+                );
+            }
             return Ok(code);
         }
         if args.fail_on != FailOn::Never && code != 0 {
@@ -272,6 +283,8 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         no_cache: args.no_cache,
         trend: args.trend,
         trend_days: args.trend_days,
+        update: args.update,
+        update_check: args.update_check,
         help: args.help,
         version: args.version,
         config: args.config,

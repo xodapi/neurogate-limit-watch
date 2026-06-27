@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use vimit::VERSION;
+use crate::VERSION;
 
 use super::constants;
 use super::theme::Theme;
@@ -53,6 +53,8 @@ pub struct Args {
     pub no_cache: bool,
     pub trend: bool,
     pub trend_days: u64,
+    pub update: bool,
+    pub update_check: bool,
     pub help: bool,
     pub version: bool,
     pub config: Option<PathBuf>,
@@ -87,12 +89,14 @@ where
         no_cache: false,
         trend: false,
         trend_days: 30,
+        update: false,
+        update_check: false,
         help: false,
         version: false,
         config: None,
     };
 
-    let mut iter = args.into_iter();
+    let mut iter = args.into_iter().peekable();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "-h" | "--help" => parsed.help = true,
@@ -177,10 +181,19 @@ where
                     }
                 };
             }
+            "update" => {
+                parsed.update = true;
+                if let Some(next) = iter.peek() {
+                    if next == "--check" {
+                        parsed.update_check = true;
+                        let _ = iter.next();
+                    }
+                }
+            }
             other => {
                 return Err(format!(
                     "unknown argument: {other}\n  hint: use --help to see available options"
-                ))
+                ));
             }
         }
     }
@@ -292,6 +305,10 @@ OPTIONS:
       --init                 Interactive setup wizard
       --trend                Show 30-day usage trends (requires saved snapshots)
       --days <N>             Days of trend history to show [default: 30]
+  
+  Commands:
+      update                 Update vimit to the latest version from GitHub Releases
+      update --check         Check for updates without installing
       --api-base <URL>       API base URL [env: VIBEMODE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: VIBEMODE_API_KEY]
       --vpn                  Switch to VPN endpoint (api.vibemod.pro)

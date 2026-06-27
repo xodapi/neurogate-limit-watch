@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use vimit as ng;
+use crate as ng;
 
 use super::accounts::AccountsConfig;
-use super::config::{dirs_or_default, Config};
+use super::config::{Config, dirs_or_default};
 
 pub fn run_doctor() -> Result<i32, String> {
     let mut ok = true;

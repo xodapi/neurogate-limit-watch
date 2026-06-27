@@ -1,16 +1,16 @@
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph, Sparkline};
-use ratatui::Terminal;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::time::{Duration, Instant};
 
-use vimit::{self as ng, VERSION};
+use crate::{self as ng, VERSION};
 
 use super::accounts::AccountConfig;
 use super::args::{Args, Preset};
@@ -105,6 +105,7 @@ pub fn collect_status(
                         if let Some((cached, _when)) = store.get(&config.api_key, &config.api_base)
                         {
                             let label = router
+                                .as_ref()
                                 .map(|r| r.active_label().to_string())
                                 .unwrap_or_else(|| "cached".to_string());
                             return Ok(StatusSnapshot {
@@ -435,7 +436,9 @@ fn draw_header(
                 String::new()
             };
             (
-                format!(" VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag}{endpoint_tag} | {label} | peak {peak} "),
+                format!(
+                    " VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag}{endpoint_tag} | {label} | peak {peak} "
+                ),
                 pal.bold_level_style(level),
             )
         }
@@ -766,6 +769,9 @@ fn draw_footer(
         if has_multi_account {
             text = format!("Tab acct | {text}");
         }
+        if let Some(latest) = super::update::latest_checked_version() {
+            text = format!("{text} | ⚠️ Update v{latest}!");
+        }
         Paragraph::new(Line::from(vec![Span::styled(text, pal.muted_style())]))
     } else {
         let mut spans = vec![
@@ -783,6 +789,13 @@ fn draw_footer(
             ];
             with_tab.extend(spans);
             spans = with_tab;
+        }
+        if let Some(latest) = super::update::latest_checked_version() {
+            spans.push(Span::raw("  "));
+            spans.push(Span::styled(
+                format!("⚠️  Update v{latest} available! Run `vimit update`"),
+                pal.bold_level_style("warning"),
+            ));
         }
         Paragraph::new(Line::from(spans)).block(
             Block::default()

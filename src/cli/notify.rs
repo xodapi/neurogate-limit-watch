@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use vimit as ng;
+use crate as ng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlertLevel {

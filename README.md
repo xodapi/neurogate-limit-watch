@@ -37,6 +37,10 @@ private prompts.
 
 ## Features
 
+- **Self-updates** (`vimit update`): check and update the CLI & GUI natively using GitHub Releases
+- **Active endpoint failover**: automatically failover between API routers, displaying an active connection badge (`api`/`r-api`)
+- **Trend sparklines**: 15-day usage graphs rendered inside GUI quota cards
+- **Stealth Mode**: mask sensitive numeric values with `***` in the GUI
 - **Multiple output modes**: human, JSON (`--json`), compact one-line (`--compact`)
 - **Live TUI monitor** (`--monitor`): ratatui dashboard with gauges, sparklines, color themes
 - **Monitor presets**: `full` (2-column grid), `compact` (single-column), `mini` (one-liner)
@@ -49,7 +53,7 @@ private prompts.
 - **abtop integration** (`--with-abtop`): merge local Codex/Claude agent status
 - **Diagnostics** (`--doctor`): validate config, accounts, env, API connectivity
 - **Setup wizard** (`--init`): interactive config, .env, and API key setup
-- **GUI** (`--features gui`): Slint-based desktop window (optional)
+- **GUI** (`--features gui`): Slint-based desktop window with stealth toggle and sparklines
 - **Safe by design**: API key from env only, never logged, no telemetry
 
 ## Download
@@ -178,6 +182,17 @@ vimit --init
 
 Creates config directory, config.toml with defaults, optionally sets up
 `.env` with your API key, and tests the connection.
+
+## Self-Updates
+
+`vimit` supports native self-updating via GitHub Releases:
+
+```bash
+vimit update --check   # Check if a new version is available
+vimit update           # Automatically download and install the latest release
+```
+
+Background checking is performed automatically in the background on TUI and GUI startup. To avoid GitHub API rate limits, checks are cached for 24 hours in `~/.config/vimit/state.json`.
 
 ## Usage
 

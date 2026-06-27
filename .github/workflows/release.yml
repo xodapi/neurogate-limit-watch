@@ -57,33 +57,32 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          mkdir -p dist
-          name="vimit-${GITHUB_REF_NAME}-${{ matrix.asset }}"
-          mkdir -p "dist/${name}"
+          mkdir -p dist/temp
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cp "target/aarch64-unknown-linux-gnu/release/${{ matrix.binary }}" "dist/${name}/"
+            cp "target/aarch64-unknown-linux-gnu/release/${{ matrix.binary }}" dist/temp/
           else
-            cp "target/release/${{ matrix.binary }}" "dist/${name}/"
+            cp "target/release/${{ matrix.binary }}" dist/temp/
             if [ -n "${{ matrix.gui_binary }}" ]; then
-              cp "target/release/${{ matrix.gui_binary }}" "dist/${name}/"
+              cp "target/release/${{ matrix.gui_binary }}" dist/temp/
             fi
           fi
-          cp README.md README.ru.md LICENSE .env.example "dist/${name}/"
-          tar -czf "dist/${name}.tar.gz" -C dist "${name}"
+          cp README.md README.ru.md LICENSE .env.example dist/temp/
+          name="vimit-${GITHUB_REF_NAME}-${{ matrix.asset }}"
+          tar -czf "dist/${name}.tar.gz" -C dist/temp .
           shasum -a 256 "dist/${name}.tar.gz" > "dist/${name}.tar.gz.sha256"
       - name: Package Windows binary
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $name = "vimit-${env:GITHUB_REF_NAME}-${{ matrix.asset }}"
-          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
-          Copy-Item "target/release/${{ matrix.binary }}" "dist/$name/"
+          New-Item -ItemType Directory -Force -Path "dist/temp" | Out-Null
+          Copy-Item "target/release/${{ matrix.binary }}" "dist/temp/"
           if ("${{ matrix.gui_binary }}" -ne "") {
-              Copy-Item "target/release/${{ matrix.gui_binary }}" "dist/$name/"
+              Copy-Item "target/release/${{ matrix.gui_binary }}" "dist/temp/"
           }
-          Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/$name/"
-          Copy-Item packaging/windows/*.cmd "dist/$name/"
-          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
+          Copy-Item README.md,README.ru.md,LICENSE,.env.example "dist/temp/"
+          Copy-Item packaging/windows/*.cmd "dist/temp/"
+          Compress-Archive -Path "dist/temp/*" -DestinationPath "dist/$name.zip" -Force
           $hash = Get-FileHash "dist/$name.zip" -Algorithm SHA256
           "$($hash.Hash.ToLower())  $name.zip" | Out-File -Encoding ascii "dist/$name.zip.sha256"
       - uses: actions/upload-artifact@v4
