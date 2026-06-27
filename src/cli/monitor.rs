@@ -611,7 +611,7 @@ fn draw_window_card(
                         .border_style(pal.border_style()),
                 )
                 .gauge_style(pal.gauge_style(&window.level))
-                .ratio((peak / 100.0) as f64);
+                .ratio(peak / 100.0);
             frame.render_widget(gauge, inner[0]);
 
             let credit_line = match &window.credits {
@@ -663,7 +663,7 @@ fn draw_window_card(
                         .border_style(pal.border_style()),
                 )
                 .gauge_style(pal.gauge_style(&window.level))
-                .ratio((peak / 100.0) as f64);
+                .ratio(peak / 100.0);
             frame.render_widget(gauge, inner[0]);
 
             let credit_line = match &window.credits {
