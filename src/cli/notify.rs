@@ -200,7 +200,7 @@ try {{
 
 #[cfg(windows)]
 fn powershell_quote(text: &str) -> String {
-    text.replace('\'', "''").replace(['\r', '\n'], " ")
+    text.chars().filter(|c| c.is_alphanumeric() || " %.,:-_/\\".contains(*c)).collect()
 }
 
 #[cfg(target_os = "macos")]
