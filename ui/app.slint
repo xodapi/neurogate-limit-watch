@@ -32,7 +32,8 @@ component LimitCard inherits Rectangle {
     in property <[float]> trend-data;
     in property <bool> stealth-mode;
 
-    in property <bool> dimmed;
+    in property <bool> dimmed: false;
+    visible: root.level != "unknown";
 
     private property <brush> accent: root.percent >= 90 ? Theme.danger : root.percent >= 75 ? Theme.warning : Theme.success;
 
@@ -175,10 +176,18 @@ component LimitCard inherits Rectangle {
 
 export component AppWindow inherits Window {
     title: "vimit-gui";
-    preferred-width: 1120px;
-    preferred-height: 680px;
-    min-width: 860px;
-    min-height: 620px;
+    in-out property <bool> is-overlay: false;
+    in-out property <bool> is-compact: false;
+    in property <float> token-rate-raw: 0.0;
+
+    preferred-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : 1120px;
+    preferred-height: root.is-overlay ? (root.is-compact ? 40px : 340px) : 680px;
+    min-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : 860px;
+    min-height: root.is-overlay ? (root.is-compact ? 40px : 340px) : 620px;
+    no-frame: root.is-overlay;
+    always-on-top: root.is-overlay;
+    background: root.is-overlay ? transparent : Theme.bg-primary;
+
 
     callback refresh-requested();
     callback demo-requested();
@@ -186,6 +195,7 @@ export component AppWindow inherits Window {
     callback account-changed(string);
     callback check-updates();
     callback auto-update-changed(bool);
+    callback close-overlay();
     in-out property <string> error-text: "";
 
     in-out property <[string]> account-names: [];
@@ -197,6 +207,7 @@ export component AppWindow inherits Window {
     in property <[float]> month-trend-data: [];
     in-out property <bool> stealth-mode: false;
     in property <string> active-endpoint-label: "";
+    in property <int> api-offline-min: -1;
     in property <string> new-version-label: "";
     in-out property <bool> auto-update-check: true;
 
@@ -218,7 +229,7 @@ export component AppWindow inherits Window {
     in property <string> five-credits: "кредиты: н/д";
     in property <string> five-requests: "запросы: н/д";
     in property <string> five-rate: "темп окна: н/д";
-    in property <string> five-percent-text: "0,0% макс";
+    in property <string> five-percent-text: "0,0%";
     in property <float> five-percent: 0;
     in property <float> five-credit-percent: 0;
     in property <float> five-request-percent: 0;
@@ -228,7 +239,7 @@ export component AppWindow inherits Window {
     in property <string> day-credits: "кредиты: н/д";
     in property <string> day-requests: "запросы: н/д";
     in property <string> day-rate: "темп окна: н/д";
-    in property <string> day-percent-text: "0,0% макс";
+    in property <string> day-percent-text: "0,0%";
     in property <float> day-percent: 0;
     in property <float> day-credit-percent: 0;
     in property <float> day-request-percent: 0;
@@ -238,7 +249,7 @@ export component AppWindow inherits Window {
     in property <string> week-credits: "кредиты: н/д";
     in property <string> week-requests: "запросы: н/д";
     in property <string> week-rate: "темп окна: н/д";
-    in property <string> week-percent-text: "0,0% макс";
+    in property <string> week-percent-text: "0,0%";
     in property <float> week-percent: 0;
     in property <float> week-credit-percent: 0;
     in property <float> week-request-percent: 0;
@@ -248,12 +259,12 @@ export component AppWindow inherits Window {
     in property <string> month-credits: "кредиты: н/д";
     in property <string> month-requests: "запросы: н/д";
     in property <string> month-rate: "темп окна: н/д";
-    in property <string> month-percent-text: "0,0% макс";
+    in property <string> month-percent-text: "0,0%";
     in property <float> month-percent: 0;
     in property <float> month-credit-percent: 0;
     in property <float> month-request-percent: 0;
 
-    Rectangle {
+    if (!root.is-overlay) : Rectangle {
         background: Theme.bg-primary;
 
         VerticalLayout {
@@ -267,6 +278,21 @@ export component AppWindow inherits Window {
 
                 Text {
                     text: root.error-text;
+                    color: #ffffff;
+                    font-size: 13px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            if (root.api-offline-min >= 0) : Rectangle {
+                height: 32px;
+                background: Theme.danger;
+                border-radius: 8px;
+
+                Text {
+                    text: "VibeMode недоступен · уже " + root.api-offline-min + " мин";
                     color: #ffffff;
                     font-size: 13px;
                     font-weight: 700;
@@ -761,6 +787,158 @@ export component AppWindow inherits Window {
                     dimmed: root.period-mode == 1 || (root.risk-only && root.month-percent < 75);
                 }
             }
+        }
+    }
+    if (root.is-overlay && !root.is-compact) : Rectangle {
+        background: #0d1117;
+        border-color: #30363d;
+        border-width: 1px;
+        border-radius: 12px;
+        padding: 12px;
+        
+        VerticalLayout {
+            padding: 12px;
+            spacing: 12px;
+            
+            // Header
+            HorizontalLayout {
+                Text {
+                    text: "vimit · VibeMode";
+                    font-size: 11px;
+                    color: #7d8590;
+                    vertical-alignment: center;
+                }
+                Rectangle {}
+                HorizontalLayout {
+                    spacing: 8px;
+                    Button {
+                        text: "-";
+                        width: 24px;
+                        height: 24px;
+                        clicked => { root.is-compact = true; }
+                    }
+                    Button {
+                        text: "x";
+                        width: 24px;
+                        height: 24px;
+                        clicked => { root.close-overlay(); }
+                    }
+                }
+            }
+            
+            // Rate row
+            HorizontalLayout {
+                Text {
+                    text: "\{round(root.token-rate-raw)}";
+                    font-size: 28px;
+                    color: #e6edf3;
+                    font-weight: 700;
+                }
+                Text {
+                    text: " " + root.token-rate-text;
+                    font-size: 12px;
+                    color: #7d8590;
+                    vertical-alignment: bottom;
+                    padding-bottom: 4px;
+                }
+                Rectangle {}
+            }
+            
+            // Windows
+            VerticalLayout {
+                spacing: 6px;
+                HorizontalLayout {
+                    Text { text: "5h"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
+                    Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
+                        Rectangle { x: 0; width: parent.width * (root.five-percent / 100); background: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
+                    }
+                    Text { text: "\{round(root.five-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                }
+                HorizontalLayout {
+                    Text { text: "24h"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
+                    Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
+                        Rectangle { x: 0; width: parent.width * (root.day-percent / 100); background: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
+                    }
+                    Text { text: "\{round(root.day-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                }
+                HorizontalLayout {
+                    Text { text: "7d"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
+                    Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
+                        Rectangle { x: 0; width: parent.width * (root.week-percent / 100); background: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
+                    }
+                    Text { text: "\{round(root.week-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                }
+                HorizontalLayout {
+                    Text { text: "30d"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
+                    Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
+                        Rectangle { x: 0; width: parent.width * (root.month-percent / 100); background: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
+                    }
+                    Text { text: "\{round(root.month-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                }
+            }
+            
+            Rectangle { height: 1px; background: #21262d; }
+            
+            // Sparkline
+            VerticalLayout {
+                spacing: 4px;
+                Text { text: "расход за 15 мин"; font-size: 10px; color: #484f58; }
+                HorizontalLayout {
+                    height: 36px;
+                    spacing: 2px;
+                    alignment: start;
+                    for val in root.five-trend-data : Rectangle {
+                        width: 14px;
+                        height: max(2px, parent.height * val / 100);
+                        y: parent.height - self.height;
+                        background: val >= 90 ? #f85149 : val >= 75 ? #d29922 : #3fb950;
+                        border-radius: 2px;
+                        opacity: 0.8;
+                    }
+                }
+            }
+            
+            HorizontalLayout {
+                Text { text: "сброс 5h окна"; font-size: 11px; color: #7d8590; }
+                Rectangle {}
+                Rectangle {
+                    background: #1f2937;
+                    border-radius: 10px;
+                    padding-left: 8px; padding-right: 8px;
+                    Text { text: root.five-reset; font-size: 11px; color: #2a78d6; }
+                }
+            }
+        }
+    }
+    
+    if (root.is-overlay && root.is-compact) : Rectangle {
+        background: #0d1117;
+        border-color: #30363d;
+        border-width: 1px;
+        border-radius: 8px;
+        
+        HorizontalLayout {
+            padding: 10px;
+            spacing: 10px;
+            Rectangle {
+                width: 8px; height: 8px; border-radius: 4px;
+                background: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950;
+                y: 8px;
+            }
+            VerticalLayout {
+                Text {
+                    text: "5h: \{round(root.five-percent)}% · \{round(root.token-rate-raw)} " + root.token-rate-text;
+                    font-size: 12px; color: #e6edf3; font-weight: 700;
+                }
+                Text {
+                    text: "клик для раскрытия";
+                    font-size: 10px; color: #7d8590;
+                }
+            }
+        }
+        
+        TouchArea {
+            clicked => { root.is-compact = false; }
         }
     }
 }

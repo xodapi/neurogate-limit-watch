@@ -71,6 +71,7 @@ pub struct StatusSnapshot {
     pub stale: bool,
     pub latency_ms: u64,
     pub api_endpoint: String,
+    pub offline_duration_min: Option<u64>,
 }
 
 pub fn collect_status(
@@ -203,6 +204,7 @@ fn snapshot_from_payload(
         stale: false,
         latency_ms: 0,
         api_endpoint: "r-api".to_string(),
+        offline_duration_min: ng::get_offline_duration_min(),
     }
 }
 
@@ -485,12 +487,17 @@ fn draw_header(
             } else {
                 String::new()
             };
-            (
-                format!(
-                    " VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag}{endpoint_tag} | {label} | peak {peak} "
-                ),
-                pal.bold_level_style(level),
-            )
+            let mut title = format!(
+                " VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag}{endpoint_tag} | {label} | peak {peak} "
+            );
+            let mut final_style = pal.bold_level_style(level);
+            
+            if let Some(min) = s.offline_duration_min {
+                title = format!(" ⚠ API offline {min}m ");
+                final_style = pal.danger.into();
+            }
+
+            (title, final_style)
         }
         None => (
             format!(" VibeMode v{VERSION}{account_prefix}{vpn_label} | waiting for data... "),
@@ -1483,6 +1490,7 @@ mod tests {
             stale: false,
             windows: ng::summarize_me(&ng::demo_payload(), 75.0, 90.0),
             daily: None,
+            offline_duration_min: None,
             abtop: Some(serde_json::json!({
                 "token_rate": 42.0,
                 "sessions_total": 2,

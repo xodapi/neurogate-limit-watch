@@ -37,7 +37,7 @@ pub fn run_once(
                     .map_err(|error| format!("cannot render JSON: {error}"))?
             );
         }
-        OutputMode::Compact => print_compact(&snapshot.windows, snapshot.abtop.as_ref()),
+        OutputMode::Compact => print_compact(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.offline_duration_min),
         OutputMode::Human => {
             print_human(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.stale)
         }
@@ -106,8 +106,11 @@ pub fn print_human(windows: &[ng::WindowState], abtop: Option<&Value>, stale: bo
     }
 }
 
-pub fn print_compact(windows: &[ng::WindowState], abtop: Option<&Value>) {
+pub fn print_compact(windows: &[ng::WindowState], abtop: Option<&Value>, offline_min: Option<u64>) {
     let mut parts = vec!["NG".to_string()];
+    if let Some(min) = offline_min {
+        parts.push(format!("offline:{}m", min));
+    }
     for window in windows {
         let peak = ng::peak_percent(window.credits.as_ref(), window.requests.as_ref())
             .map(|value| format!("{value:.0}%"))

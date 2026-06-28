@@ -59,6 +59,7 @@ pub struct Args {
     pub version: bool,
     pub config: Option<PathBuf>,
     pub daily_limit: Option<f64>,
+    pub overlay: bool,
 }
 
 pub fn parse_args<I>(args: I) -> Result<Args, String>
@@ -96,6 +97,7 @@ where
         version: false,
         config: None,
         daily_limit: None,
+        overlay: false,
     };
 
     let mut iter = args.into_iter().peekable();
@@ -131,6 +133,7 @@ where
                 }
             }
             "--demo" => parsed.demo = true,
+            "--overlay" => parsed.overlay = true,
             "--json" => parsed.output = set_output_mode(parsed.output, OutputMode::Json)?,
             "--compact" => parsed.output = set_output_mode(parsed.output, OutputMode::Compact)?,
             "--monitor" => parsed.monitor = true,

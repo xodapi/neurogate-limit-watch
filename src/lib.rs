@@ -9,6 +9,26 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+use std::sync::Mutex;
+
+pub static OFFLINE_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+
+pub fn update_offline_state(is_error: bool) -> Option<u64> {
+    let mut state = OFFLINE_SINCE.lock().unwrap();
+    if is_error {
+        if state.is_none() {
+            *state = Some(Instant::now());
+        }
+        state.map(|since| since.elapsed().as_secs() / 60)
+    } else {
+        *state = None;
+        None
+    }
+}
+
+pub fn get_offline_duration_min() -> Option<u64> {
+    OFFLINE_SINCE.lock().unwrap().map(|since| since.elapsed().as_secs() / 60)
+}
 
 pub const DEFAULT_API_BASE: &str = "https://r-api.vibemod.pro";
 pub const VPN_API_BASE: &str = "https://api.vibemod.pro";
@@ -268,11 +288,13 @@ impl HttpClient {
             match self.fetch_me(api_key, endpoint) {
                 Ok(value) => {
                     router.record_success();
+                    update_offline_state(false);
                     return Ok((value, router.active_label().to_string()));
                 }
                 Err(error) => {
                     let is_retryable = is_retryable_error(&error);
                     if !is_retryable {
+                        update_offline_state(true);
                         return Err(error);
                     }
                     let failed_over = router.record_failure();
@@ -280,6 +302,7 @@ impl HttpClient {
                         continue;
                     }
                     if attempt == max_retries {
+                        update_offline_state(true);
                         return Err(format!(
                             "{error} (after {} retr{})",
                             attempt + 1,
@@ -869,6 +892,12 @@ pub fn summary_to_json_with_stale(
             "active_endpoint".to_string(),
             Value::String(active_endpoint.to_string()),
         );
+        if let Some(offline_mins) = get_offline_duration_min() {
+            map.insert("api_status".to_string(), Value::String("offline".to_string()));
+            map.insert("offline_duration_min".to_string(), Value::Number(serde_json::Number::from(offline_mins)));
+        } else {
+            map.insert("api_status".to_string(), Value::String("online".to_string()));
+        }
     }
     obj
 }

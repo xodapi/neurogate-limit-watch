@@ -113,8 +113,19 @@ fn load_gui_accounts() -> (Vec<String>, Vec<GuiAccount>) {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let is_overlay = args.iter().any(|arg| arg == "--overlay");
+    let is_compact = args.iter().any(|arg| arg == "--compact");
+
     ng::cli::update::start_background_check();
     let app = AppWindow::new().expect("cannot initialize Slint window");
+
+    if is_overlay {
+        app.set_is_overlay(true);
+        if is_compact {
+            app.set_is_compact(true);
+        }
+    }
 
     // Initialize System Tray
     let tray_menu = Menu::new();
@@ -144,6 +155,10 @@ fn main() {
             let _ = app.hide();
         }
         slint::CloseRequestResponse::KeepWindowShown
+    });
+
+    app.on_close_overlay(move || {
+        let _ = slint::quit_event_loop();
     });
 
     // Listen for Tray Events
@@ -406,13 +421,18 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
         });
     }
 
+    let offline_min = ng::get_offline_duration_min().map(|m| m as i32).unwrap_or(-1);
+    app.set_api_offline_min(offline_min);
+
     match result {
         Ok(res) => {
             let dashboard = res.dashboard;
             app.set_status_text(dashboard.status.into());
             app.set_source_text(dashboard.source.into());
             app.set_agent_text(dashboard.agent.into());
-            app.set_token_rate_text(dashboard.token_rate.into());
+            app.set_token_rate_text(dashboard.token_rate.clone().into());
+            let raw_rate = dashboard.token_rate.split_whitespace().next().and_then(|s| s.replace(',', ".").parse::<f32>().ok()).unwrap_or(0.0);
+            app.set_token_rate_raw(raw_rate);
             app.set_active_endpoint_label(res.active_endpoint_label.into());
 
             if let Some(latest) = ng::cli::update::latest_checked_version() {
@@ -482,7 +502,7 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let reset: SharedString = window.reset.clone().into();
     let credits: SharedString = ng::metric_text("кредиты", window.credits.as_ref()).into();
     let requests: SharedString = ng::metric_text("запросы", window.requests.as_ref()).into();
-    let percent_text: SharedString = format!("{} макс", ng::format_percent(window.percent)).into();
+    let percent_text: SharedString = format!("{}", ng::format_percent(window.percent)).into();
     let percent = window.percent as f32;
     let credit_percent =
         ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
@@ -641,6 +661,7 @@ fn load_dashboard(
             agent: agent.summary,
             token_rate: agent.token_rate,
             windows,
+            daily: None,
         },
         active_endpoint_label,
         five_trend_data,
