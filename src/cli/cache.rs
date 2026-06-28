@@ -115,7 +115,12 @@ impl CacheStore {
 }
 
 fn cache_key(api_key: &str, api_base: &str) -> String {
-    format!("{}|{}", api_key, api_base.trim_end_matches('/'))
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    api_key.hash(&mut hasher);
+    let hash = hasher.finish();
+    format!("{:016x}|{}", hash, api_base.trim_end_matches('/'))
 }
 
 fn default_cache_path() -> Option<PathBuf> {

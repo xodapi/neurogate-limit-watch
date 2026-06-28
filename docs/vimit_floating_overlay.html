@@ -1,0 +1,255 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1f2e;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;font-family:var(--font-sans,'Inter',sans-serif);padding:24px;gap:16px}
+.overlay{
+  background:#0d1117;
+  border:1px solid #30363d;
+  border-radius:12px;
+  width:300px;
+  padding:12px 14px;
+  position:relative;
+  user-select:none;
+  cursor:default;
+}
+.overlay.pinned{border-color:#2a78d6;box-shadow:0 0 0 1px rgba(42,120,214,0.3)}
+.drag-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.drag-title{font-size:11px;font-weight:500;color:#7d8590;letter-spacing:0.06em;text-transform:uppercase}
+.drag-controls{display:flex;gap:6px;align-items:center}
+.ctrl-btn{background:none;border:none;cursor:pointer;padding:2px 4px;border-radius:4px;color:#7d8590;font-size:13px;transition:color 0.15s,background 0.15s}
+.ctrl-btn:hover{color:#e6edf3;background:#21262d}
+.ctrl-btn.active{color:#2a78d6}
+
+.rate-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.rate-val{font-size:28px;font-weight:600;color:#e6edf3;letter-spacing:-0.5px}
+.rate-unit{font-size:12px;color:#7d8590;margin-left:4px}
+.rate-delta{font-size:12px;padding:2px 6px;border-radius:4px;font-weight:500}
+.rate-delta.up{background:#1f3a25;color:#3fb950}
+.rate-delta.warn{background:#3a2a1a;color:#d29922}
+.rate-delta.crit{background:#3d1a1a;color:#f85149}
+
+.windows{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.win-row{display:grid;grid-template-columns:28px 1fr 44px 42px;gap:6px;align-items:center}
+.win-label{font-size:11px;color:#7d8590;font-weight:500}
+.track{height:6px;border-radius:3px;background:#21262d;overflow:hidden;position:relative}
+.fill{height:100%;border-radius:3px;transition:width 0.4s ease}
+.win-pct{font-size:11px;font-weight:600;text-align:right}
+.win-reset{font-size:10px;color:#484f58;text-align:right}
+
+.sep{height:1px;background:#21262d;margin:8px 0}
+
+.chart-label{font-size:10px;color:#484f58;margin-bottom:4px}
+.sparkline-wrap{position:relative;height:36px}
+canvas.spark{width:100%;height:36px}
+
+.reset-row{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.reset-label{font-size:11px;color:#7d8590}
+.reset-val{font-size:11px;font-weight:600;color:#e6edf3}
+.reset-timer{font-size:11px;padding:2px 8px;border-radius:10px;background:#1f2937;color:#2a78d6;font-weight:500}
+
+.toggle-row{display:flex;gap:8px;margin-top:2px}
+.size-btn{flex:1;background:none;border:1px solid #30363d;border-radius:6px;padding:4px 0;font-size:10px;color:#7d8590;cursor:pointer;transition:all 0.15s}
+.size-btn:hover,.size-btn.active{border-color:#2a78d6;color:#2a78d6;background:#0d1f38}
+
+.hint{font-size:11px;color:#484f58;text-align:center;max-width:300px}
+
+.compact-view{display:none}
+.compact-view.show{display:flex}
+.compact-overlay{
+  background:#0d1117;
+  border:1px solid #30363d;
+  border-radius:8px;
+  padding:6px 10px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  cursor:pointer;
+}
+.compact-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.compact-text{font-size:12px;font-weight:600;color:#e6edf3}
+.compact-sub{font-size:10px;color:#7d8590}
+</style>
+
+<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:8px 0">
+
+<div class="compact-view" id="compactView">
+  <div class="compact-overlay" onclick="document.getElementById('compactView').classList.remove('show');document.getElementById('mainOverlay').style.display='block'">
+    <div class="compact-dot" id="cDot" style="background:#d29922"></div>
+    <div>
+      <div class="compact-text" id="cText">5h: 78% · 1.8 кред/мин</div>
+      <div class="compact-sub">нажать чтобы раскрыть</div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="mainOverlay">
+  <div class="drag-bar">
+    <span class="drag-title">vimit · VibeMode</span>
+    <div class="drag-controls">
+      <button class="ctrl-btn active" id="pinBtn" title="Поверх окон" onclick="togglePin()">
+        <i class="ti ti-pin" aria-hidden="true"></i>
+      </button>
+      <button class="ctrl-btn" title="Компактный режим" onclick="goCompact()">
+        <i class="ti ti-arrows-minimize" aria-hidden="true"></i>
+      </button>
+      <button class="ctrl-btn" title="Скрыть" onclick="this.closest('.overlay').style.display='none'">
+        <i class="ti ti-x" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="rate-row">
+    <div>
+      <span class="rate-val" id="rateVal">1.8</span>
+      <span class="rate-unit">кред/мин</span>
+    </div>
+    <span class="rate-delta warn" id="rateDelta">+12% к норме</span>
+  </div>
+
+  <div class="windows" id="winList"></div>
+
+  <div class="sep"></div>
+
+  <div class="chart-label">расход за 15 мин (кред/мин)</div>
+  <div class="sparkline-wrap">
+    <canvas class="spark" id="spark" role="img" aria-label="График расхода кредитов за 15 минут">График расхода</canvas>
+  </div>
+
+  <div class="reset-row">
+    <span class="reset-label">сброс 5h окна</span>
+    <span class="reset-timer" id="resetTimer">через 3ч 59м</span>
+  </div>
+
+  <div class="toggle-row" style="margin-top:10px">
+    <button class="size-btn active" onclick="setUnit('cred')">кред/мин</button>
+    <button class="size-btn" onclick="setUnit('tok')">токены/мин</button>
+    <button class="size-btn" onclick="setUnit('pct')">%/час</button>
+  </div>
+</div>
+
+<div class="hint">← прототип плавающего оверлея для Issue агенту</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const windows = [
+  {id:'5h',  pct:78, reset:'3ч 59м', color:'#d29922'},
+  {id:'24h', pct:51, reset:'18ч 59м',color:'#3fb950'},
+  {id:'7d',  pct:42, reset:'5д 23ч', color:'#3fb950'},
+  {id:'30d', pct:41, reset:'20д 23ч',color:'#3fb950'},
+];
+
+function levelColor(p){return p>=90?'#f85149':p>=75?'#d29922':'#3fb950'}
+
+function renderWindows(){
+  const el=document.getElementById('winList');
+  el.innerHTML=windows.map(w=>`
+    <div class="win-row">
+      <span class="win-label">${w.id}</span>
+      <div class="track"><div class="fill" style="width:${w.pct}%;background:${levelColor(w.pct)}"></div></div>
+      <span class="win-pct" style="color:${levelColor(w.pct)}">${w.pct}%</span>
+      <span class="win-reset">${w.reset}</span>
+    </div>`).join('');
+}
+renderWindows();
+
+const spark5Data=[1.1,1.4,1.2,1.8,2.1,1.9,1.6,1.8,2.3,2.0,1.7,1.9,2.2,1.8,1.8];
+let sparkChart=null;
+
+function drawSpark(){
+  const ctx=document.getElementById('spark').getContext('2d');
+  const labels=spark5Data.map((_,i)=>i===14?'сейчас':`-${14-i}м`);
+  const grad=ctx.createLinearGradient(0,0,0,36);
+  grad.addColorStop(0,'rgba(210,153,34,0.35)');
+  grad.addColorStop(1,'rgba(210,153,34,0.02)');
+  sparkChart=new Chart(ctx,{
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        data:spark5Data,
+        borderColor:'#d29922',
+        borderWidth:1.5,
+        pointRadius:0,
+        pointHoverRadius:3,
+        pointHoverBackgroundColor:'#d29922',
+        fill:true,
+        backgroundColor:grad,
+        tension:0.35
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{
+        mode:'index',intersect:false,
+        callbacks:{label:c=>`${c.parsed.y.toFixed(1)} кред/мин`}
+      }},
+      scales:{
+        x:{display:false},
+        y:{
+          display:true,
+          position:'right',
+          ticks:{
+            color:'#484f58',font:{size:9},
+            callback:v=>v.toFixed(1),
+            maxTicksLimit:3
+          },
+          grid:{color:'#21262d',lineWidth:0.5},
+          border:{display:false}
+        }
+      }
+    }
+  });
+}
+drawSpark();
+
+let unit='cred';
+const multipliers={cred:1,tok:750,pct:0.083};
+const unitLabels={cred:'кред/мин',tok:'токены/мин',pct:'%/час'};
+
+function setUnit(u){
+  unit=u;
+  document.querySelectorAll('.size-btn').forEach((b,i)=>b.classList.toggle('active',['cred','tok','pct'][i]===u));
+  const m=multipliers[u];
+  const v=(1.8*m);
+  document.getElementById('rateVal').textContent=u==='tok'?Math.round(v):v.toFixed(u==='pct'?1:1);
+  document.querySelector('.rate-unit').textContent=unitLabels[u];
+  const newData=spark5Data.map(x=>+(x*m).toFixed(u==='tok'?0:1));
+  sparkChart.data.datasets[0].data=newData;
+  sparkChart.options.scales.y.ticks.callback=v=>u==='tok'?Math.round(v):v.toFixed(1);
+  sparkChart.update();
+}
+
+function togglePin(){
+  const btn=document.getElementById('pinBtn');
+  const ov=document.getElementById('mainOverlay');
+  btn.classList.toggle('active');
+  ov.classList.toggle('pinned',btn.classList.contains('active'));
+}
+
+function goCompact(){
+  document.getElementById('mainOverlay').style.display='none';
+  document.getElementById('compactView').classList.add('show');
+}
+
+let secs=3*3600+59*60;
+function tick(){
+  secs--;
+  const h=Math.floor(secs/3600);
+  const m=Math.floor((secs%3600)/60);
+  document.getElementById('resetTimer').textContent=h>0?`через ${h}ч ${m}м`:`через ${m}м`;
+  if(secs<=900)document.getElementById('resetTimer').style.background='#3d1a1a';
+}
+setInterval(tick,1000);
+
+setInterval(()=>{
+  const v=1.5+Math.random()*1.2;
+  spark5Data.shift();spark5Data.push(+v.toFixed(1));
+  const m=multipliers[unit];
+  sparkChart.data.datasets[0].data=spark5Data.map(x=>+(x*m).toFixed(1));
+  sparkChart.data.datasets[0].borderColor=levelColor(v>2.5?91:v>1.8?77:50);
+  sparkChart.update('none');
+  document.getElementById('rateVal').textContent=(v*m).toFixed(unit==='tok'?0:1);
+},3000);
+</script>
