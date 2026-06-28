@@ -75,8 +75,8 @@ vimit doctor — system diagnostics
 
   environment:
        HOME: /home/user
-       NEUROGATE_API_BASE: (not set, will use default)
-       NEUROGATE_API_KEY: (set)
+       VIBEMODE_API_BASE: (not set, will use default)
+       VIBEMODE_API_KEY: (set)
 
   testing API connection to https://r-api.vibemod.pro... OK (4 window(s))
 

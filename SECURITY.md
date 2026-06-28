@@ -5,7 +5,7 @@
 ## Secrets
 
 - Do not commit API keys.
-- Pass the VibeMode key through `NEUROGATE_API_KEY`.
+- Pass the VibeMode key through `VIBEMODE_API_KEY`.
 - Or keep it in a local `.env` file next to the binary or working directory.
 - The tool never writes the key to disk.
 - The tool does not print the key in normal errors.

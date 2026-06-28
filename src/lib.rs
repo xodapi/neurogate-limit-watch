@@ -1043,11 +1043,17 @@ pub fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<Strin
         vec![key]
     };
 
-    for k in keys {
+    for k in &keys {
         if let Some(val) = env::var(k).ok().filter(|v| !v.is_empty()) {
+            if let Some(suffix) = k.strip_prefix("NEUROGATE_") {
+                eprintln!("warning: {k} is deprecated, rename to VIBEMODE_{suffix}");
+            }
             return Some(val);
         }
-        if let Some(val) = dotenv.get(k).cloned().filter(|v| !v.is_empty()) {
+        if let Some(val) = dotenv.get(*k).cloned().filter(|v| !v.is_empty()) {
+            if let Some(suffix) = k.strip_prefix("NEUROGATE_") {
+                eprintln!("warning: {k} is deprecated, rename to VIBEMODE_{suffix}");
+            }
             return Some(val);
         }
     }
