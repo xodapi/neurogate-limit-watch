@@ -225,6 +225,7 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         demo: args.demo || merged.demo,
         mock: args.mock.or_else(|| merged.mock.clone()),
         output: args.output,
+        daily_limit: args.daily_limit,
         monitor: args.monitor || merged.monitor,
         preset: if args.preset == cli::args::Preset::Full
             && merged.preset != cli::args::Preset::Full

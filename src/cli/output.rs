@@ -15,13 +15,15 @@ pub fn run_once(
     cache: Option<&CacheStore>,
     router: Option<&mut ng::Router>,
 ) -> Result<i32, String> {
-    let snapshot = super::monitor::collect_status(args, config, http, cache, router)?;
+    let mut daily_file = crate::cli::daily::DailyFile::load();
+    let snapshot = super::monitor::collect_status(args, config, http, cache, router, &mut daily_file)?;
     if let Some(store) = trends {
         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
     }
     let status = ng::summary_to_json_with_stale(
         &snapshot.windows,
         snapshot.abtop.as_ref(),
+        snapshot.daily.as_ref(),
         snapshot.stale,
         snapshot.latency_ms,
         &snapshot.api_endpoint,

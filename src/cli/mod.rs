@@ -4,6 +4,7 @@ pub mod cache;
 pub mod config;
 pub mod constants;
 pub mod doctor;
+pub mod daily;
 pub mod init;
 pub mod monitor;
 pub mod notify;

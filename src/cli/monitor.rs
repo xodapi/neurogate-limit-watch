@@ -66,6 +66,7 @@ impl PanelState {
 pub struct StatusSnapshot {
     pub windows: Vec<ng::WindowState>,
     pub abtop: Option<Value>,
+    pub daily: Option<crate::DailyState>,
     pub fetched_at: chrono::DateTime<chrono::Utc>,
     pub stale: bool,
     pub latency_ms: u64,
@@ -78,6 +79,7 @@ pub fn collect_status(
     http: &ng::HttpClient,
     cache: Option<&CacheStore>,
     mut router: Option<&mut ng::Router>,
+    daily_file: &mut crate::cli::daily::DailyFile,
 ) -> Result<StatusSnapshot, String> {
     let fetch_result: Result<(serde_json::Value, u64, String), String> = if args.demo {
         Ok((ng::demo_payload(), 0, "demo".to_string()))
@@ -108,12 +110,33 @@ pub fn collect_status(
                                 .as_ref()
                                 .map(|r| r.active_label().to_string())
                                 .unwrap_or_else(|| "cached".to_string());
-                            return Ok(StatusSnapshot {
+                            let mut snapshot = StatusSnapshot {
                                 stale: true,
                                 latency_ms: elapsed,
                                 api_endpoint: label,
                                 ..snapshot_from_payload(args, config, cached)
-                            });
+                            };
+                            if let Some(w7d) = snapshot.windows.clone().iter().find(|w| w.key == "7d") {
+                                if let Some(c) = w7d.credits.as_ref() {
+                                    let daily_state = daily_file.get_state(c.limit, args.daily_limit);
+                                    snapshot.windows.insert(0, ng::WindowState {
+                                        key: "today",
+                                        level: daily_state.level.clone(),
+                                        reset: "End of Day".to_string(),
+                                        reset_in_seconds: None,
+                                        credits: Some(ng::Metric {
+                                            used: daily_state.spent_today,
+                                            limit: daily_state.daily_limit,
+                                            remaining: daily_state.daily_limit - daily_state.spent_today,
+                                            percent: daily_state.percent,
+                                        }),
+                                        requests: None,
+                                        percent: daily_state.percent,
+                                    });
+                                    snapshot.daily = Some(daily_state);
+                                }
+                            }
+                            return Ok(snapshot);
                         }
                     }
                 }
@@ -123,12 +146,37 @@ pub fn collect_status(
     };
 
     let (payload, latency_ms, api_endpoint) = fetch_result?;
-    Ok(StatusSnapshot {
+    let mut snapshot = StatusSnapshot {
         stale: false,
         latency_ms,
         api_endpoint,
         ..snapshot_from_payload(args, config, payload)
-    })
+    };
+    if let Some(w7d) = snapshot.windows.clone().iter().find(|w| w.key == "7d") {
+        if let Some(c) = w7d.credits.as_ref() {
+            daily_file.update(c.remaining);
+            let _ = daily_file.save();
+            let daily_state = daily_file.get_state(c.limit, args.daily_limit);
+            
+            snapshot.windows.insert(0, ng::WindowState {
+                key: "today",
+                level: daily_state.level.clone(),
+                reset: "End of Day".to_string(),
+                reset_in_seconds: None,
+                credits: Some(ng::Metric {
+                    used: daily_state.spent_today,
+                    limit: daily_state.daily_limit,
+                    remaining: daily_state.daily_limit - daily_state.spent_today,
+                    percent: daily_state.percent,
+                }),
+                requests: None,
+                percent: daily_state.percent,
+            });
+
+            snapshot.daily = Some(daily_state);
+        }
+    }
+    Ok(snapshot)
 }
 
 fn snapshot_from_payload(
@@ -150,6 +198,7 @@ fn snapshot_from_payload(
     StatusSnapshot {
         windows,
         abtop,
+        daily: None,
         fetched_at: chrono::Utc::now(),
         stale: false,
         latency_ms: 0,
@@ -207,6 +256,7 @@ pub fn run_monitor(
         ng::DEFAULT_API_BASE.to_string(),
         vec![ng::VPN_API_BASE.to_string()],
     );
+    let mut daily_file = crate::cli::daily::DailyFile::load();
 
     loop {
         let now = Instant::now();
@@ -217,7 +267,7 @@ pub fn run_monitor(
                 None
             };
             match load_config(args, account, panels.vpn_mode)
-                .and_then(|config| collect_status(args, &config, &http, cache, Some(&mut router)))
+                .and_then(|config| collect_status(args, &config, &http, cache, Some(&mut router), &mut daily_file))
             {
                 Ok(snapshot) => {
                     if let Some(store) = trends {
@@ -1432,6 +1482,7 @@ mod tests {
         StatusSnapshot {
             stale: false,
             windows: ng::summarize_me(&ng::demo_payload(), 75.0, 90.0),
+            daily: None,
             abtop: Some(serde_json::json!({
                 "token_rate": 42.0,
                 "sessions_total": 2,

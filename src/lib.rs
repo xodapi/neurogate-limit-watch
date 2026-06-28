@@ -173,6 +173,15 @@ pub struct Dashboard {
     pub agent: String,
     pub token_rate: String,
     pub windows: Vec<WindowState>,
+    pub daily: Option<DailyState>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DailyState {
+    pub spent_today: f64,
+    pub daily_limit: f64,
+    pub percent: f64,
+    pub level: String,
 }
 
 #[derive(Debug, Clone)]
@@ -811,17 +820,28 @@ fn window_level_from_peak(peak: f64) -> &'static str {
     }
 }
 
-pub fn summary_to_json(windows: &[WindowState], abtop: Option<&Value>) -> Value {
+pub fn summary_to_json(
+    windows: &[WindowState],
+    abtop: Option<&Value>,
+    daily: Option<&DailyState>,
+) -> Value {
     json!({
         "source": "vibemode",
         "windows": windows.iter().map(window_to_json).collect::<Vec<_>>(),
         "abtop": abtop.cloned().unwrap_or(Value::Null),
+        "daily": daily.map(|d| json!(d)).unwrap_or_else(|| json!({
+            "spent_today": 0.0,
+            "daily_limit": 0.0,
+            "percent": 0.0,
+            "level": "normal"
+        })),
     })
 }
 
 pub fn summary_to_json_with_stale(
     windows: &[WindowState],
     abtop: Option<&Value>,
+    daily: Option<&DailyState>,
     stale: bool,
     latency_ms: u64,
     active_endpoint: &str,
@@ -830,6 +850,12 @@ pub fn summary_to_json_with_stale(
         "source": "vibemode",
         "windows": windows.iter().map(window_to_json).collect::<Vec<_>>(),
         "abtop": abtop.cloned().unwrap_or(Value::Null),
+        "daily": daily.map(|d| json!(d)).unwrap_or_else(|| json!({
+            "spent_today": 0.0,
+            "daily_limit": 0.0,
+            "percent": 0.0,
+            "level": "normal"
+        })),
     });
     if let Some(map) = obj.as_object_mut() {
         if stale {
@@ -1095,7 +1121,7 @@ mod tests {
             "id": "usr_demo",
             "usage": {"rows": [{"credits5Hours": 39, "creditLimit5Hours": 50}]}
         });
-        let encoded = summary_to_json(&summarize_me(&payload, 75.0, 90.0), None).to_string();
+        let encoded = summary_to_json(&summarize_me(&payload, 75.0, 90.0), None, None).to_string();
 
         assert!(encoded.contains("\"source\":\"vibemode\""));
         assert!(!encoded.contains("usr_demo"));

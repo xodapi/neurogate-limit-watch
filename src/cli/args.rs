@@ -58,6 +58,7 @@ pub struct Args {
     pub help: bool,
     pub version: bool,
     pub config: Option<PathBuf>,
+    pub daily_limit: Option<f64>,
 }
 
 pub fn parse_args<I>(args: I) -> Result<Args, String>
@@ -94,6 +95,7 @@ where
         help: false,
         version: false,
         config: None,
+        daily_limit: None,
     };
 
     let mut iter = args.into_iter().peekable();
@@ -101,6 +103,14 @@ where
         match arg.as_str() {
             "-h" | "--help" => parsed.help = true,
             "-V" | "--version" => parsed.version = true,
+            "--daily-limit" => {
+                let value = next_value(&mut iter, "--daily-limit")?;
+                parsed.daily_limit = Some(
+                    value
+                        .parse::<f64>()
+                        .map_err(|_| "--daily-limit must be a number".to_string())?,
+                );
+            }
             "--config" => parsed.config = Some(PathBuf::from(next_value(&mut iter, "--config")?)),
             "--account" => {
                 parsed.account = Some(next_value(&mut iter, "--account")?);
@@ -297,6 +307,7 @@ OPTIONS:
       --danger <PCT>         Danger threshold percentage [default: 90]
       --threshold <SPEC>     Per-window thresholds, e.g. 5h=80:95,7d=90
                              Format: KEY=WARNING[:DANGER] where KEY is 5h,24h,7d,30d
+      --daily-limit <N>      Set daily credit limit (0 = auto calculate based on 7d limit)
       --env-file <PATH>      Load .env file explicitly
       --config <PATH>        Load config file (default: ~/.config/vimit/config.toml)
       --account <NAME>       Use account profile from accounts.toml
