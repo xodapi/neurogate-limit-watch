@@ -882,7 +882,7 @@ export component AppWindow inherits Window {
             // Rate row
             HorizontalLayout {
                 Text {
-                    text: "\{round(root.token-rate-raw)}";
+                    text: root.stealth-mode ? "***" : "\{round(root.token-rate-raw)}";
                     font-size: 28px;
                     color: #e6edf3;
                     font-weight: 700;
@@ -905,28 +905,28 @@ export component AppWindow inherits Window {
                     Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
                         Rectangle { x: 0; width: parent.width * (root.five-percent / 100); background: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
-                    Text { text: "\{round(root.five-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.stealth-mode ? "***" : "\{round(root.five-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
                 }
                 HorizontalLayout {
                     Text { text: "24h"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
                     Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
                         Rectangle { x: 0; width: parent.width * (root.day-percent / 100); background: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
-                    Text { text: "\{round(root.day-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.stealth-mode ? "***" : "\{round(root.day-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
                 }
                 HorizontalLayout {
                     Text { text: "7d"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
                     Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
                         Rectangle { x: 0; width: parent.width * (root.week-percent / 100); background: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
-                    Text { text: "\{round(root.week-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.stealth-mode ? "***" : "\{round(root.week-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
                 }
                 HorizontalLayout {
                     Text { text: "30d"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
                     Rectangle { height: 6px; border-radius: 3px; background: #21262d; 
                         Rectangle { x: 0; width: parent.width * (root.month-percent / 100); background: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
-                    Text { text: "\{round(root.month-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.stealth-mode ? "***" : "\{round(root.month-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
                 }
             }
             
@@ -980,7 +980,7 @@ export component AppWindow inherits Window {
             }
             VerticalLayout {
                 Text {
-                    text: "5h: \{round(root.five-percent)}% · \{round(root.token-rate-raw)} " + root.token-rate-text;
+                    text: "5h: " + (root.stealth-mode ? "***" : "\{round(root.five-percent)}%") + " · " + (root.stealth-mode ? "***" : "\{round(root.token-rate-raw)} " + root.token-rate-text);
                     font-size: 12px; color: #e6edf3; font-weight: 700;
                 }
                 Text {
