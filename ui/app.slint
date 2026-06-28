@@ -194,6 +194,7 @@ export component AppWindow inherits Window {
     callback settings-changed(float, float);
     callback account-changed(string);
     callback check-updates();
+    callback update-now();
     callback auto-update-changed(bool);
     callback close-overlay();
     callback open-config-dir();
@@ -698,6 +699,13 @@ export component AppWindow inherits Window {
                                 text: "Проверить сейчас";
                                 clicked => {
                                     root.check-updates();
+                                }
+                            }
+
+                            if (root.new-version-label != "") : Button {
+                                text: "Установить обновление";
+                                clicked => {
+                                    root.update-now();
                                 }
                             }
 

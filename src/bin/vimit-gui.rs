@@ -354,6 +354,31 @@ fn main() {
         });
     });
 
+    let weak = app.as_weak();
+    app.on_update_now(move || {
+        let weak_clone = weak.clone();
+        thread::spawn(move || {
+            let _ = weak_clone.upgrade_in_event_loop(|app| {
+                app.set_status_text("Скачивание обновления...".into());
+            });
+            match ng::cli::update::check_and_update(false) {
+                Ok(_) => {
+                    let _ = weak_clone.upgrade_in_event_loop(|app| {
+                        app.set_status_text(
+                            "Обновление установлено! Перезапустите приложение.".into(),
+                        );
+                        app.set_new_version_label("".into());
+                    });
+                }
+                Err(e) => {
+                    let _ = weak_clone.upgrade_in_event_loop(move |app| {
+                        app.set_status_text(format!("Ошибка обновления: {}", e).into());
+                    });
+                }
+            }
+        });
+    });
+
     app.on_open_config_dir(move || {
         let home = if cfg!(windows) {
             std::env::var("APPDATA")
