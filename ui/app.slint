@@ -1,4 +1,5 @@
-import { Button, ComboBox } from "std-widgets.slint";
+import { Button, ComboBox, CheckBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 component MeterBar inherits Rectangle {
     in property <float> value;
@@ -6,7 +7,7 @@ component MeterBar inherits Rectangle {
     private property <float> clipped: root.value < 0 ? 0 : root.value > 100 ? 100 : root.value;
 
     height: 12px;
-    background: #252c36;
+    background: Theme.border;
     border-radius: 6px;
 
     Rectangle {
@@ -33,11 +34,11 @@ component LimitCard inherits Rectangle {
 
     in property <bool> dimmed;
 
-    private property <brush> accent: percent >= 90 ? #d66f73 : percent >= 75 ? #caa45f : #78ad84;
+    private property <brush> accent: root.percent >= 90 ? Theme.danger : root.percent >= 75 ? Theme.warning : Theme.success;
 
     opacity: root.dimmed ? 0.36 : 1.0;
-    background: #171d25;
-    border-color: root.dimmed ? #252c36 : #334052;
+    background: Theme.bg-card;
+    border-color: root.dimmed ? Theme.border : Theme.border;
     border-width: 1px;
     border-radius: 8px;
     min-height: 195px;
@@ -50,7 +51,7 @@ component LimitCard inherits Rectangle {
             padding-bottom: 2px;
             Text {
                 text: root.name;
-                color: #f2f4f8;
+                color: Theme.text-primary;
                 font-size: 25px;
                 font-weight: 700;
             }
@@ -96,8 +97,8 @@ component LimitCard inherits Rectangle {
         Text {
             text: root.percent-text;
             color: root.accent;
-            font-size: 16px;
-            font-weight: 700;
+            font-size: 44px;
+            font-weight: 800;
         }
 
         Rectangle {
@@ -118,7 +119,7 @@ component LimitCard inherits Rectangle {
                     Text {
                         width: 58px;
                         text: "кред";
-                        color: #8d96aa;
+                        color: Theme.text-muted;
                         font-size: 11px;
                     }
 
@@ -134,7 +135,7 @@ component LimitCard inherits Rectangle {
                     Text {
                         width: 58px;
                         text: "запросы";
-                        color: #8d96aa;
+                        color: Theme.text-muted;
                         font-size: 11px;
                     }
 
@@ -148,72 +149,26 @@ component LimitCard inherits Rectangle {
 
         Text {
             text: root.stealth-mode ? "кредиты: ***" : root.credits;
-            color: #c9d0de;
+            color: Theme.text-muted;
             font-size: 12px;
         }
 
         Text {
             text: root.stealth-mode ? "запросы: ***" : root.requests;
-            color: #c9d0de;
+            color: Theme.text-muted;
             font-size: 12px;
         }
 
         Text {
             text: root.rate;
-            color: #b8c2d8;
+            color: Theme.text-muted;
             font-size: 11px;
         }
 
         Text {
             text: root.reset;
-            color: #8d96aa;
+            color: Theme.text-muted;
             font-size: 11px;
-        }
-    }
-}
-
-component SpectrumColumn inherits Rectangle {
-    in property <float> value;
-    in property <brush> fill;
-    in property <string> caption;
-    private property <float> clipped: root.value < 0 ? 0 : root.value > 100 ? 100 : root.value;
-
-    width: 74px;
-    background: transparent;
-
-    VerticalLayout {
-        spacing: 8px;
-
-        Rectangle {
-            height: 92px;
-            background: #202833;
-            border-radius: 8px;
-
-            Rectangle {
-                y: parent.height - max(6px, parent.height * root.clipped / 100);
-                height: max(6px, parent.height * root.clipped / 100);
-                width: parent.width;
-                border-radius: 8px;
-                background: root.fill;
-            }
-
-            Rectangle {
-                x: parent.width / 2 - 6px;
-                y: parent.height - max(6px, parent.height * root.clipped / 100) - 8px;
-                width: 12px;
-                height: 12px;
-                border-radius: 6px;
-                background: #f8fbff;
-                border-color: root.fill;
-                border-width: 3px;
-            }
-        }
-
-        Text {
-            text: root.caption;
-            color: #9fa8bb;
-            font-size: 12px;
-            horizontal-alignment: center;
         }
     }
 }
@@ -231,6 +186,7 @@ export component AppWindow inherits Window {
     callback account-changed(string);
     callback check-updates();
     callback auto-update-changed(bool);
+    in-out property <string> error-text: "";
 
     in-out property <[string]> account-names: [];
     in-out property <string> current-account: "";
@@ -262,7 +218,7 @@ export component AppWindow inherits Window {
     in property <string> five-credits: "кредиты: н/д";
     in property <string> five-requests: "запросы: н/д";
     in property <string> five-rate: "темп окна: н/д";
-    in property <string> five-percent-text: "0,0% пик";
+    in property <string> five-percent-text: "0,0% макс";
     in property <float> five-percent: 0;
     in property <float> five-credit-percent: 0;
     in property <float> five-request-percent: 0;
@@ -272,7 +228,7 @@ export component AppWindow inherits Window {
     in property <string> day-credits: "кредиты: н/д";
     in property <string> day-requests: "запросы: н/д";
     in property <string> day-rate: "темп окна: н/д";
-    in property <string> day-percent-text: "0,0% пик";
+    in property <string> day-percent-text: "0,0% макс";
     in property <float> day-percent: 0;
     in property <float> day-credit-percent: 0;
     in property <float> day-request-percent: 0;
@@ -282,7 +238,7 @@ export component AppWindow inherits Window {
     in property <string> week-credits: "кредиты: н/д";
     in property <string> week-requests: "запросы: н/д";
     in property <string> week-rate: "темп окна: н/д";
-    in property <string> week-percent-text: "0,0% пик";
+    in property <string> week-percent-text: "0,0% макс";
     in property <float> week-percent: 0;
     in property <float> week-credit-percent: 0;
     in property <float> week-request-percent: 0;
@@ -292,23 +248,38 @@ export component AppWindow inherits Window {
     in property <string> month-credits: "кредиты: н/д";
     in property <string> month-requests: "запросы: н/д";
     in property <string> month-rate: "темп окна: н/д";
-    in property <string> month-percent-text: "0,0% пик";
+    in property <string> month-percent-text: "0,0% макс";
     in property <float> month-percent: 0;
     in property <float> month-credit-percent: 0;
     in property <float> month-request-percent: 0;
 
     Rectangle {
-        background: #0f131a;
+        background: Theme.bg-primary;
 
         VerticalLayout {
             padding: 18px;
             spacing: 12px;
 
+            if (root.error-text != "") : Rectangle {
+                height: 32px;
+                background: #d66f73;
+                border-radius: 8px;
+
+                Text {
+                    text: root.error-text;
+                    color: #ffffff;
+                    font-size: 13px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
             Rectangle {
                 min-height: 245px;
-                background: #151a22;
+                background: Theme.bg-card;
                 border-radius: 10px;
-                border-color: #2b3444;
+                border-color: Theme.border;
                 border-width: 1px;
 
                 HorizontalLayout {
@@ -323,7 +294,7 @@ export component AppWindow inherits Window {
                             alignment: start;
                             Text {
                                 text: "VibeMode Control";
-                                color: #f5f7fb;
+                                color: Theme.text-primary;
                                 font-size: 28px;
                                 font-weight: 800;
                             }
@@ -361,7 +332,7 @@ export component AppWindow inherits Window {
 
                         Text {
                             text: root.status-text;
-                            color: #9fa8bb;
+                            color: Theme.text-muted;
                             font-size: 15px;
                         }
 
@@ -414,36 +385,15 @@ export component AppWindow inherits Window {
                     }
 
                     Rectangle { }
-
-                    SpectrumColumn {
-                        caption: "5h";
-                        value: root.five-percent;
-                        fill: #9a84b8;
-                    }
-                    SpectrumColumn {
-                        caption: "24h";
-                        value: root.day-percent;
-                        fill: #7fb4bd;
-                    }
-                    SpectrumColumn {
-                        caption: "7d";
-                        value: root.week-percent;
-                        fill: #c8b56b;
-                    }
-                    SpectrumColumn {
-                        caption: "30d";
-                        value: root.month-percent;
-                        fill: #7faf7a;
-                    }
                 }
             }
 
             Rectangle {
                 visible: root.settings-open;
                 height: root.settings-open ? 230px : 0px;
-                background: #151a22;
+                background: Theme.bg-card;
                 border-radius: 8px;
-                border-color: #2b3444;
+                border-color: Theme.border;
                 border-width: 1px;
                 clip: true;
 
@@ -460,14 +410,14 @@ export component AppWindow inherits Window {
 
                             Text {
                                 text: "Настройки панели";
-                                color: #e6edf5;
+                                color: Theme.text-primary;
                                 font-size: 14px;
                                 font-weight: 800;
                             }
 
                             Text {
                                 text: "фильтры без чтения приватных данных";
-                                color: #8f9aaa;
+                                color: Theme.text-muted;
                                 font-size: 11px;
                             }
                         }
@@ -514,6 +464,11 @@ export component AppWindow inherits Window {
                                     root.risk-only = !root.risk-only;
                                 }
                             }
+                            CheckBox {
+                                text: "Светлая тема";
+                                checked: !Theme.dark-mode;
+                                toggled => { Theme.dark-mode = !self.checked; }
+                            }
                         }
                     }
 
@@ -531,14 +486,14 @@ export component AppWindow inherits Window {
 
                             Text {
                                 text: "Аккаунт";
-                                color: #e6edf5;
+                                color: Theme.text-primary;
                                 font-size: 14px;
                                 font-weight: 800;
                             }
 
                             Text {
                                 text: "выбор профиля для лимитов";
-                                color: #8f9aaa;
+                                color: Theme.text-muted;
                                 font-size: 11px;
                             }
                         }
@@ -582,14 +537,14 @@ export component AppWindow inherits Window {
 
                             Text {
                                 text: "Пороги";
-                                color: #e6edf5;
+                                color: Theme.text-primary;
                                 font-size: 14px;
                                 font-weight: 800;
                             }
 
                             Text {
                                 text: "warning: \{round(root.warning-threshold)}% | danger: \{round(root.danger-threshold)}%";
-                                color: #8f9aaa;
+                                color: Theme.text-muted;
                                 font-size: 11px;
                             }
                         }
@@ -607,7 +562,7 @@ export component AppWindow inherits Window {
 
                             Text {
                                 text: "\{round(root.warning-threshold)}%";
-                                color: #c9d0de;
+                                color: Theme.text-muted;
                                 font-size: 12px;
                                 vertical-alignment: center;
                                 min-width: 40px;
@@ -644,7 +599,7 @@ export component AppWindow inherits Window {
 
                             Text {
                                 text: "\{round(root.danger-threshold)}%";
-                                color: #c9d0de;
+                                color: Theme.text-muted;
                                 font-size: 12px;
                                 vertical-alignment: center;
                                 min-width: 40px;
@@ -695,14 +650,14 @@ export component AppWindow inherits Window {
 
                             Text {
                                 text: "Обновления";
-                                color: #e6edf5;
+                                color: Theme.text-primary;
                                 font-size: 14px;
                                 font-weight: 800;
                             }
 
                             Text {
                                 text: "проверка новых версий vimit";
-                                color: #8f9aaa;
+                                color: Theme.text-muted;
                                 font-size: 11px;
                             }
                         }
@@ -724,10 +679,11 @@ export component AppWindow inherits Window {
                                     root.auto-update-check = !root.auto-update-check;
                                     root.auto-update-changed(root.auto-update-check);
                                 }
-                            }
-                        }
-                    }
-                }
+            }
+        }
+
+    }
+}
             }
 
             GridLayout {
