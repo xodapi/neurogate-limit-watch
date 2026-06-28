@@ -453,6 +453,7 @@ struct GuiDashboardResult {
     month_trend_data: Vec<f32>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn start_refresh(
     app: Weak<AppWindow>,
     demo: bool,
@@ -615,12 +616,21 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let reset: SharedString = window.reset.clone().into();
     let credits: SharedString = ng::metric_text("кредиты", window.credits.as_ref()).into();
     let requests: SharedString = ng::metric_text("запросы", window.requests.as_ref()).into();
-    let percent_text: SharedString = format!("{}", ng::format_percent(window.percent)).into();
+    let percent_text: SharedString = ng::format_percent(window.percent).into();
     let percent = window.percent as f32;
     let credit_percent =
         ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
     let request_percent =
         ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
+
+    let donut_remaining = match window.credits.as_ref() {
+        Some(m) => ng::short_number(m.remaining),
+        None => "н/д".to_string(),
+    };
+    let donut_limit = match window.credits.as_ref() {
+        Some(m) => ng::short_number(m.limit),
+        None => "н/д".to_string(),
+    };
 
     match key {
         "5h" => {
@@ -655,6 +665,8 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
             app.set_week_percent(percent);
             app.set_week_credit_percent(credit_percent);
             app.set_week_request_percent(request_percent);
+            app.set_donut_remaining(donut_remaining.into());
+            app.set_donut_limit(donut_limit.into());
         }
         "30d" => {
             app.set_month_level(level);
