@@ -28,13 +28,16 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev
+          sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libglib2.0-dev libgtk-3-dev
       - name: Show Rust toolchain
         run: |
           rustc --version
           cargo --version
       - name: Format check
         run: cargo fmt --check
+      - name: Check GUI (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo check --features gui
       - name: Clippy
         run: cargo clippy --all-targets ${{ matrix.features }} -- -D warnings
       - name: Test
