@@ -194,9 +194,11 @@ export component AppWindow inherits Window {
     callback settings-changed(float, float);
     callback account-changed(string);
     callback check-updates();
+    callback update-now();
     callback auto-update-changed(bool);
     callback close-overlay();
     callback open-config-dir();
+    callback open-accounts-config();
     in-out property <string> error-text: "";
     in-out property <bool> needs-setup: false;
 
@@ -255,6 +257,9 @@ export component AppWindow inherits Window {
     in property <float> week-percent: 0;
     in property <float> week-credit-percent: 0;
     in property <float> week-request-percent: 0;
+    in property <string> donut-remaining: "45.7M";
+    in property <string> donut-limit: "60M";
+
 
     in property <string> month-level: "загрузка";
     in property <string> month-reset: "сброс неизвестен";
@@ -547,6 +552,11 @@ export component AppWindow inherits Window {
                                 }
                             }
 
+                            Button {
+                                text: "📂 Config";
+                                clicked => { root.open-accounts-config(); }
+                            }
+
                             Rectangle { }
                         }
                     }
@@ -698,6 +708,13 @@ export component AppWindow inherits Window {
                                 text: "Проверить сейчас";
                                 clicked => {
                                     root.check-updates();
+                                }
+                            }
+
+                            if (root.new-version-label != "") : Button {
+                                text: "Установить обновление";
+                                clicked => {
+                                    root.update-now();
                                 }
                             }
 
