@@ -431,7 +431,15 @@ fn draw_frame(
 
     let mut idx = 0;
     if panels.show_header {
-        draw_header(frame, chunks[idx], snapshot, &pal, account_names, cur_account, panels);
+        draw_header(
+            frame,
+            chunks[idx],
+            snapshot,
+            &pal,
+            account_names,
+            cur_account,
+            panels,
+        );
         idx += 1;
     }
     if panels.show_quota {
@@ -623,10 +631,16 @@ fn draw_body(
             );
         }
     } else {
-        let waiting = Paragraph::new(Span::styled(
-            "Collecting VibeMode status...",
-            pal.muted_style(),
-        ))
+        let waiting = Paragraph::new(vec![
+            Line::from(Span::styled(
+                "Collecting VibeMode status...",
+                pal.muted_style(),
+            )),
+            Line::from(Span::styled(
+                "Press r to refresh, ? for help",
+                pal.muted_style(),
+            )),
+        ])
         .block(
             Block::default()
                 .title("Limits")
@@ -861,35 +875,36 @@ fn draw_footer(
     let has_multi_account = current_account.is_some();
     let height = area.height;
     let footer = if height <= 1 {
-        let mut text = format!("q quit | r refresh | {interval_secs}s/{next_refresh_secs}s");
+        let mut text = "? help | 5 trends".to_string();
         if has_multi_account {
-            text = format!("Tab acct | {text}");
+            text = format!("{text} | Tab account");
         }
+        text = format!("{text} | q quit | r refresh | {interval_secs}s/{next_refresh_secs}s");
         if let Some(latest) = super::update::latest_checked_version() {
-            text = format!("{text} | ⚠️ Update v{latest}!");
+            text = format!("{text} | ⚠ Update v{latest}!");
         }
         Paragraph::new(Line::from(vec![Span::styled(text, pal.muted_style())]))
     } else {
         let mut spans = vec![
-            Span::styled(" q ", pal.key_binding_style()),
-            Span::raw("quit  "),
-            Span::styled(" r ", pal.key_binding_style()),
-            Span::raw(format!(
-                "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
-            )),
+            Span::styled(" ? ", pal.key_binding_style()),
+            Span::raw("help  "),
+            Span::styled(" 5 ", pal.key_binding_style()),
+            Span::raw("trends  "),
         ];
         if has_multi_account {
-            let mut with_tab = vec![
-                Span::styled(" Tab ", pal.key_binding_style()),
-                Span::raw("account  "),
-            ];
-            with_tab.extend(spans);
-            spans = with_tab;
+            spans.push(Span::styled(" Tab ", pal.key_binding_style()));
+            spans.push(Span::raw("account  "));
         }
+        spans.push(Span::styled(" q ", pal.key_binding_style()));
+        spans.push(Span::raw("quit  "));
+        spans.push(Span::styled(" r ", pal.key_binding_style()));
+        spans.push(Span::raw(format!(
+            "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
+        )));
         if let Some(latest) = super::update::latest_checked_version() {
             spans.push(Span::raw("  "));
             spans.push(Span::styled(
-                format!("⚠️  Update v{latest} available! Run `vimit update`"),
+                format!("⚠ Update v{latest}"),
                 pal.bold_level_style("warning"),
             ));
         }
@@ -1348,7 +1363,7 @@ pub fn render_monitor_lines(
 
     lines.push(fit_text(
         &format!(
-            "q quit | Esc quit | r refresh now | auto {}s | next {}s | .env next to binary supported",
+            "? help | 5 trends | Tab account | q quit | r refresh | auto {}s | next {}s",
             interval_secs, next_refresh_secs
         ),
         width,
