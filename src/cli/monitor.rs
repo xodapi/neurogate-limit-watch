@@ -162,8 +162,9 @@ pub fn collect_status(
     };
     if let Some(w7d) = snapshot.windows.clone().iter().find(|w| w.key == "7d") {
         if let Some(c) = w7d.credits.as_ref() {
-            daily_file.update(c.remaining);
-            let _ = daily_file.save();
+            if let Ok(updated_file) = crate::cli::daily::DailyFile::atomic_update(c.remaining) {
+                *daily_file = updated_file;
+            }
             let daily_state = daily_file.get_state(c.limit, args.daily_limit);
 
             snapshot.windows.insert(

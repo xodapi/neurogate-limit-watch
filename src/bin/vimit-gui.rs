@@ -3,6 +3,7 @@
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -162,6 +163,9 @@ fn main() {
         ng::Router::default_fallbacks(),
     )));
 
+    let refresh_gen = Arc::new(AtomicU64::new(0));
+    let is_refreshing = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
     let (account_names, account_configs) = load_gui_accounts();
     let current_acct = Arc::new(Mutex::new(None::<GuiAccount>));
 
@@ -195,6 +199,8 @@ fn main() {
     let http_clone = http.clone();
     let acct = current_acct.clone();
     let router_clone = router.clone();
+    let gen1 = refresh_gen.clone();
+    let is_ref1 = is_refreshing.clone();
     app.on_refresh_requested(move || {
         start_refresh(
             weak.clone(),
@@ -204,6 +210,8 @@ fn main() {
             router_clone.clone(),
             ng::DEFAULT_WARNING_THRESHOLD,
             ng::DEFAULT_DANGER_THRESHOLD,
+            gen1.clone(),
+            is_ref1.clone(),
         );
     });
 
@@ -211,6 +219,8 @@ fn main() {
     let http_clone = http.clone();
     let acct = current_acct.clone();
     let router_clone = router.clone();
+    let gen2 = refresh_gen.clone();
+    let is_ref2 = is_refreshing.clone();
     app.on_demo_requested(move || {
         start_refresh(
             weak.clone(),
@@ -220,6 +230,8 @@ fn main() {
             router_clone.clone(),
             ng::DEFAULT_WARNING_THRESHOLD,
             ng::DEFAULT_DANGER_THRESHOLD,
+            gen2.clone(),
+            is_ref2.clone(),
         );
     });
 
@@ -227,6 +239,8 @@ fn main() {
     let http_clone = http.clone();
     let acct = current_acct.clone();
     let router_clone = router.clone();
+    let gen3 = refresh_gen.clone();
+    let is_ref3 = is_refreshing.clone();
     app.on_settings_changed(move |warning, danger| {
         start_refresh(
             weak.clone(),
@@ -236,6 +250,8 @@ fn main() {
             router_clone.clone(),
             warning as f64,
             danger as f64,
+            gen3.clone(),
+            is_ref3.clone(),
         );
     });
 
@@ -244,6 +260,8 @@ fn main() {
     let http_clone = http.clone();
     let acct = current_acct.clone();
     let router_clone = router.clone();
+    let gen4 = refresh_gen.clone();
+    let is_ref4 = is_refreshing.clone();
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
         start_refresh(
             weak.clone(),
@@ -253,6 +271,8 @@ fn main() {
             router_clone.clone(),
             ng::DEFAULT_WARNING_THRESHOLD,
             ng::DEFAULT_DANGER_THRESHOLD,
+            gen4.clone(),
+            is_ref4.clone(),
         );
     });
 
@@ -264,6 +284,8 @@ fn main() {
         router.clone(),
         ng::DEFAULT_WARNING_THRESHOLD,
         ng::DEFAULT_DANGER_THRESHOLD,
+        refresh_gen.clone(),
+        is_refreshing.clone(),
     );
 
     if let Ok(dotenv) = gui_load_dotenv() {
@@ -414,12 +436,24 @@ fn start_refresh(
     router: Arc<Mutex<ng::Router>>,
     warning: f64,
     danger: f64,
+    generation: Arc<AtomicU64>,
+    is_refreshing: Arc<std::sync::atomic::AtomicBool>,
 ) {
+    if is_refreshing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    let my_gen = generation.fetch_add(1, Ordering::Relaxed) + 1;
     thread::spawn(move || {
         let result = load_dashboard(demo, &http, &account, warning, danger, &router);
+        if generation.load(Ordering::Relaxed) != my_gen {
+            is_refreshing.store(false, Ordering::SeqCst);
+            return;
+        }
         let _ = app.upgrade_in_event_loop(move |app| {
             apply_dashboard(&app, result);
         });
+        is_refreshing.store(false, Ordering::SeqCst);
     });
 }
 fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) {
