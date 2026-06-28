@@ -174,6 +174,107 @@ component LimitCard inherits Rectangle {
     }
 }
 
+component DonutChart inherits Rectangle {
+    in property <string> remaining;
+    in property <string> total;
+    in property <string> reset;
+    in property <float> percent;
+    in property <bool> stealth-mode;
+    
+    in property <bool> dimmed: false;
+    
+    private property <brush> accent: root.percent >= 90 ? Theme.danger : root.percent >= 75 ? Theme.warning : Theme.success;
+    private property <float> safe-percent: root.percent > 99.9 ? 99.9 : root.percent;
+
+    opacity: root.dimmed ? 0.36 : 1.0;
+    background: Theme.bg-card;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: 8px;
+    min-height: 195px;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        alignment: center;
+
+        HorizontalLayout {
+            padding-bottom: 2px;
+            Text {
+                text: "7d";
+                color: Theme.text-primary;
+                font-size: 25px;
+                font-weight: 700;
+            }
+            Rectangle {}
+        }
+
+        Rectangle {
+            width: 100px;
+            height: 100px;
+            
+            Path {
+                width: 100px;
+                height: 100px;
+                stroke: #21262d;
+                stroke-width: 12px;
+                fill: transparent;
+                viewbox-x: -50; viewbox-y: -50;
+                viewbox-width: 100; viewbox-height: 100;
+                MoveTo { x: 0; y: -45; }
+                ArcTo {
+                    radius-x: 45; radius-y: 45;
+                    x: 0.01; y: -45;
+                    large-arc: true;
+                    sweep: true;
+                }
+            }
+            
+            Path {
+                width: 100px;
+                height: 100px;
+                stroke: root.accent;
+                stroke-width: 12px;
+                fill: transparent;
+                viewbox-x: -50; viewbox-y: -50;
+                viewbox-width: 100; viewbox-height: 100;
+                
+                MoveTo { x: 0; y: -45; }
+                ArcTo {
+                    radius-x: 45; radius-y: 45;
+                    x: 45 * sin(root.safe-percent / 100 * 360deg);
+                    y: -45 * cos(root.safe-percent / 100 * 360deg);
+                    large-arc: root.safe-percent > 50;
+                    sweep: true;
+                }
+            }
+            
+            Text {
+                text: root.stealth-mode ? "***" : root.remaining;
+                color: Theme.text-primary;
+                font-size: 16px;
+                font-weight: 800;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        
+        Text {
+            text: "осталось от " + root.total;
+            color: Theme.text-muted;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+        
+        Text {
+            text: root.reset;
+            color: Theme.text-muted;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "vimit-gui";
     in-out property <bool> is-overlay: false;
@@ -752,22 +853,15 @@ export component AppWindow inherits Window {
                     dimmed: root.period-mode == 2 || (root.risk-only && root.five-percent < 75);
                 }
 
-                LimitCard {
+                DonutChart {
                     row: 0;
                     col: 1;
-                    name: "24h";
-                    level: root.day-level;
-                    reset: root.day-reset;
-                    credits: root.day-credits;
-                    requests: root.day-requests;
-                    rate: root.day-rate;
-                    percent-text: root.day-percent-text;
-                    percent: root.day-percent;
-                    credit-percent: root.day-credit-percent;
-                    request-percent: root.day-request-percent;
-                    trend-data: root.day-trend-data;
+                    remaining: root.week-credits;
+                    total: root.week-requests;
+                    reset: root.week-reset;
+                    percent: root.week-percent;
                     stealth-mode: root.stealth-mode;
-                    dimmed: root.period-mode == 2 || (root.risk-only && root.day-percent < 75);
+                    dimmed: root.period-mode == 1 || (root.risk-only && root.week-percent < 75);
                 }
 
                 LimitCard {
@@ -864,7 +958,6 @@ export component AppWindow inherits Window {
         border-color: #30363d;
         border-width: 1px;
         border-radius: 12px;
-        padding: 12px;
         
         VerticalLayout {
             padding: 12px;
@@ -909,7 +1002,6 @@ export component AppWindow inherits Window {
                     font-size: 12px;
                     color: #7d8590;
                     vertical-alignment: bottom;
-                    padding-bottom: 4px;
                 }
                 Rectangle {}
             }
@@ -974,8 +1066,10 @@ export component AppWindow inherits Window {
                 Rectangle {
                     background: #1f2937;
                     border-radius: 10px;
-                    padding-left: 8px; padding-right: 8px;
-                    Text { text: root.five-reset; font-size: 11px; color: #2a78d6; }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { text: root.five-reset; font-size: 11px; color: #2a78d6; }
+                    }
                 }
             }
         }
