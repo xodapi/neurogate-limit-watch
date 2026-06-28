@@ -196,7 +196,9 @@ export component AppWindow inherits Window {
     callback check-updates();
     callback auto-update-changed(bool);
     callback close-overlay();
+    callback open-config-dir();
     in-out property <string> error-text: "";
+    in-out property <bool> needs-setup: false;
 
     in-out property <[string]> account-names: [];
     in-out property <string> current-account: "";
@@ -264,7 +266,7 @@ export component AppWindow inherits Window {
     in property <float> month-credit-percent: 0;
     in property <float> month-request-percent: 0;
 
-    if (!root.is-overlay) : Rectangle {
+    if (!root.is-overlay && !root.needs-setup) : Rectangle {
         background: Theme.bg-primary;
 
         VerticalLayout {
@@ -789,6 +791,57 @@ export component AppWindow inherits Window {
             }
         }
     }
+
+    if (!root.is-overlay && root.needs-setup) : Rectangle {
+        background: Theme.bg-primary;
+
+        VerticalLayout {
+            padding: 40px;
+            spacing: 24px;
+            alignment: center;
+
+            Text {
+                text: "Добро пожаловать в VibeMode Control";
+                color: Theme.text-primary;
+                font-size: 32px;
+                font-weight: 800;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: "Для начала работы необходимо настроить конфигурацию или запустить демо-режим.";
+                color: Theme.text-muted;
+                font-size: 16px;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 20px;
+                alignment: center;
+                padding-top: 20px;
+
+                Button {
+                    text: "Открыть папку с настройками";
+                    clicked => { root.open-config-dir(); }
+                }
+
+                Button {
+                    text: "Запустить в Демо режиме";
+                    clicked => {
+                        root.needs-setup = false;
+                        root.demo-requested();
+                    }
+                }
+
+                Button {
+                    text: "Проверить подключение";
+                    clicked => { root.refresh-requested(); }
+                }
+            }
+        }
+    }
+
     if (root.is-overlay && !root.is-compact) : Rectangle {
         background: #0d1117;
         border-color: #30363d;

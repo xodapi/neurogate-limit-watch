@@ -117,23 +117,30 @@ pub fn collect_status(
                                 api_endpoint: label,
                                 ..snapshot_from_payload(args, config, cached)
                             };
-                            if let Some(w7d) = snapshot.windows.clone().iter().find(|w| w.key == "7d") {
+                            if let Some(w7d) =
+                                snapshot.windows.clone().iter().find(|w| w.key == "7d")
+                            {
                                 if let Some(c) = w7d.credits.as_ref() {
-                                    let daily_state = daily_file.get_state(c.limit, args.daily_limit);
-                                    snapshot.windows.insert(0, ng::WindowState {
-                                        key: "today",
-                                        level: daily_state.level.clone(),
-                                        reset: "End of Day".to_string(),
-                                        reset_in_seconds: None,
-                                        credits: Some(ng::Metric {
-                                            used: daily_state.spent_today,
-                                            limit: daily_state.daily_limit,
-                                            remaining: daily_state.daily_limit - daily_state.spent_today,
+                                    let daily_state =
+                                        daily_file.get_state(c.limit, args.daily_limit);
+                                    snapshot.windows.insert(
+                                        0,
+                                        ng::WindowState {
+                                            key: "today",
+                                            level: daily_state.level.clone(),
+                                            reset: "End of Day".to_string(),
+                                            reset_in_seconds: None,
+                                            credits: Some(ng::Metric {
+                                                used: daily_state.spent_today,
+                                                limit: daily_state.daily_limit,
+                                                remaining: daily_state.daily_limit
+                                                    - daily_state.spent_today,
+                                                percent: daily_state.percent,
+                                            }),
+                                            requests: None,
                                             percent: daily_state.percent,
-                                        }),
-                                        requests: None,
-                                        percent: daily_state.percent,
-                                    });
+                                        },
+                                    );
                                     snapshot.daily = Some(daily_state);
                                 }
                             }
@@ -158,21 +165,24 @@ pub fn collect_status(
             daily_file.update(c.remaining);
             let _ = daily_file.save();
             let daily_state = daily_file.get_state(c.limit, args.daily_limit);
-            
-            snapshot.windows.insert(0, ng::WindowState {
-                key: "today",
-                level: daily_state.level.clone(),
-                reset: "End of Day".to_string(),
-                reset_in_seconds: None,
-                credits: Some(ng::Metric {
-                    used: daily_state.spent_today,
-                    limit: daily_state.daily_limit,
-                    remaining: daily_state.daily_limit - daily_state.spent_today,
+
+            snapshot.windows.insert(
+                0,
+                ng::WindowState {
+                    key: "today",
+                    level: daily_state.level.clone(),
+                    reset: "End of Day".to_string(),
+                    reset_in_seconds: None,
+                    credits: Some(ng::Metric {
+                        used: daily_state.spent_today,
+                        limit: daily_state.daily_limit,
+                        remaining: daily_state.daily_limit - daily_state.spent_today,
+                        percent: daily_state.percent,
+                    }),
+                    requests: None,
                     percent: daily_state.percent,
-                }),
-                requests: None,
-                percent: daily_state.percent,
-            });
+                },
+            );
 
             snapshot.daily = Some(daily_state);
         }
@@ -268,9 +278,16 @@ pub fn run_monitor(
             } else {
                 None
             };
-            match load_config(args, account, panels.vpn_mode)
-                .and_then(|config| collect_status(args, &config, &http, cache, Some(&mut router), &mut daily_file))
-            {
+            match load_config(args, account, panels.vpn_mode).and_then(|config| {
+                collect_status(
+                    args,
+                    &config,
+                    &http,
+                    cache,
+                    Some(&mut router),
+                    &mut daily_file,
+                )
+            }) {
                 Ok(snapshot) => {
                     if let Some(store) = trends {
                         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
@@ -491,7 +508,7 @@ fn draw_header(
                 " VibeMode v{VERSION}{account_prefix}{vpn_label}{stale_tag}{latency_tag}{endpoint_tag} | {label} | peak {peak} "
             );
             let mut final_style = pal.bold_level_style(level);
-            
+
             if let Some(min) = s.offline_duration_min {
                 title = format!(" ⚠ API offline {min}m ");
                 final_style = pal.danger.into();

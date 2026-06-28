@@ -296,6 +296,13 @@ fn main() {
         ng::DEFAULT_DANGER_THRESHOLD,
     );
 
+    if let Ok(dotenv) = gui_load_dotenv() {
+        let config = runtime_config(&dotenv, &current_acct);
+        if config.api_key.is_empty() {
+            app.set_needs_setup(true);
+        }
+    }
+
     app.set_auto_update_check(ng::cli::update::is_auto_check_enabled());
 
     app.on_auto_update_changed(|enabled| {
@@ -345,6 +352,39 @@ fn main() {
                 }
             }
         });
+    });
+
+    app.on_open_config_dir(move || {
+        let home = if cfg!(windows) {
+            std::env::var("APPDATA")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .or_else(|| {
+                    std::env::var("USERPROFILE")
+                        .ok()
+                        .map(std::path::PathBuf::from)
+                })
+        } else {
+            std::env::var("HOME").ok().map(std::path::PathBuf::from)
+        };
+        if let Some(home) = home {
+            let config_dir = if cfg!(windows) {
+                home.join("vimit")
+            } else {
+                home.join(".config").join("vimit")
+            };
+            let _ = std::fs::create_dir_all(&config_dir);
+            #[cfg(windows)]
+            let _ = std::process::Command::new("explorer")
+                .arg(&config_dir)
+                .spawn();
+            #[cfg(target_os = "macos")]
+            let _ = std::process::Command::new("open").arg(&config_dir).spawn();
+            #[cfg(target_os = "linux")]
+            let _ = std::process::Command::new("xdg-open")
+                .arg(&config_dir)
+                .spawn();
+        }
     });
 
     app.run().expect("Slint event loop failed");
@@ -421,7 +461,9 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
         });
     }
 
-    let offline_min = ng::get_offline_duration_min().map(|m| m as i32).unwrap_or(-1);
+    let offline_min = ng::get_offline_duration_min()
+        .map(|m| m as i32)
+        .unwrap_or(-1);
     app.set_api_offline_min(offline_min);
 
     match result {
@@ -431,7 +473,12 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
             app.set_source_text(dashboard.source.into());
             app.set_agent_text(dashboard.agent.into());
             app.set_token_rate_text(dashboard.token_rate.clone().into());
-            let raw_rate = dashboard.token_rate.split_whitespace().next().and_then(|s| s.replace(',', ".").parse::<f32>().ok()).unwrap_or(0.0);
+            let raw_rate = dashboard
+                .token_rate
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.replace(',', ".").parse::<f32>().ok())
+                .unwrap_or(0.0);
             app.set_token_rate_raw(raw_rate);
             app.set_active_endpoint_label(res.active_endpoint_label.into());
 

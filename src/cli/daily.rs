@@ -45,13 +45,13 @@ impl DailyFile {
         }
         let raw = fs::read_to_string(&path).unwrap_or_default();
         let mut file: Self = toml::from_str(&raw).unwrap_or_default();
-        
+
         let today = current_date_str();
         if file.daily.date != today {
             file.daily.date = today;
             file.daily.spent_today = 0.0;
         }
-        
+
         file
     }
 
@@ -93,7 +93,7 @@ impl DailyFile {
                 limit_7d / 7.0
             }
         });
-        
+
         let mut percent = 0.0;
         if limit > 0.0 {
             percent = (self.daily.spent_today / limit) * 100.0;

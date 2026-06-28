@@ -16,7 +16,8 @@ pub fn run_once(
     router: Option<&mut ng::Router>,
 ) -> Result<i32, String> {
     let mut daily_file = crate::cli::daily::DailyFile::load();
-    let snapshot = super::monitor::collect_status(args, config, http, cache, router, &mut daily_file)?;
+    let snapshot =
+        super::monitor::collect_status(args, config, http, cache, router, &mut daily_file)?;
     if let Some(store) = trends {
         let _ = store.save_snapshot(&snapshot.windows, snapshot.fetched_at);
     }
@@ -37,7 +38,11 @@ pub fn run_once(
                     .map_err(|error| format!("cannot render JSON: {error}"))?
             );
         }
-        OutputMode::Compact => print_compact(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.offline_duration_min),
+        OutputMode::Compact => print_compact(
+            &snapshot.windows,
+            snapshot.abtop.as_ref(),
+            snapshot.offline_duration_min,
+        ),
         OutputMode::Human => {
             print_human(&snapshot.windows, snapshot.abtop.as_ref(), snapshot.stale)
         }

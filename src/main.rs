@@ -153,7 +153,9 @@ fn real_main() -> Result<i32, String> {
         if let Some(mock) = &args.mock {
             cmd.arg("--mock").arg(mock);
         }
-        let _ = cmd.spawn().map_err(|e| format!("failed to launch vimit-gui: {e}"))?;
+        let _ = cmd
+            .spawn()
+            .map_err(|e| format!("failed to launch vimit-gui: {e}"))?;
         return Ok(0);
     }
 

@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 pub static OFFLINE_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
 
@@ -27,7 +27,10 @@ pub fn update_offline_state(is_error: bool) -> Option<u64> {
 }
 
 pub fn get_offline_duration_min() -> Option<u64> {
-    OFFLINE_SINCE.lock().unwrap().map(|since| since.elapsed().as_secs() / 60)
+    OFFLINE_SINCE
+        .lock()
+        .unwrap()
+        .map(|since| since.elapsed().as_secs() / 60)
 }
 
 pub const DEFAULT_API_BASE: &str = "https://r-api.vibemod.pro";
@@ -893,10 +896,19 @@ pub fn summary_to_json_with_stale(
             Value::String(active_endpoint.to_string()),
         );
         if let Some(offline_mins) = get_offline_duration_min() {
-            map.insert("api_status".to_string(), Value::String("offline".to_string()));
-            map.insert("offline_duration_min".to_string(), Value::Number(serde_json::Number::from(offline_mins)));
+            map.insert(
+                "api_status".to_string(),
+                Value::String("offline".to_string()),
+            );
+            map.insert(
+                "offline_duration_min".to_string(),
+                Value::Number(serde_json::Number::from(offline_mins)),
+            );
         } else {
-            map.insert("api_status".to_string(), Value::String("online".to_string()));
+            map.insert(
+                "api_status".to_string(),
+                Value::String("online".to_string()),
+            );
         }
     }
     obj
@@ -1064,7 +1076,9 @@ pub fn find_dotenv_custom(explicit: Option<&PathBuf>) -> Option<PathBuf> {
     }
 
     // Fallback to ~/.vimit/.env
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok();
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .ok();
     if let Some(home_path) = home {
         let home_env = PathBuf::from(home_path).join(".vimit").join(".env");
         if home_env.is_file() {
