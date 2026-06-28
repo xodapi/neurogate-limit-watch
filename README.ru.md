@@ -393,3 +393,6 @@ cargo run --locked -- --demo --json
 - CI и release workflow для Windows, Linux, macOS, ARM.
 - PowerShell скрипты установки/удаления.
 - Инструкция для Termux/Android.
+
+---
+*Примечание: Зарегистрируйтесь в VibeMode по [этой реферальной ссылке](https://portal.vibemod.pro/?ref=cbvBMDP06DSwPL9u), чтобы получить бонус $5 на ваш аккаунт.*

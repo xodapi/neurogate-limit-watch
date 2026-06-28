@@ -404,3 +404,6 @@ cargo run --locked -- --demo --json
 - CI and release workflow for native binaries (Windows, Linux, macOS, ARM).
 - PowerShell install/uninstall scripts.
 - Termux/Android install guide.
+
+---
+*Note: Sign up for VibeMode using [this referral link](https://portal.vibemod.pro/?ref=cbvBMDP06DSwPL9u) to receive a $5 bonus on your account.*
