@@ -320,12 +320,7 @@ pub fn run_monitor(
             .saturating_duration_since(Instant::now())
             .as_secs();
 
-        let current_account_name = if has_accounts && total_accounts > 1 {
-            Some(account_names[cur_account].as_str())
-        } else {
-            None
-        };
-
+        // Removed current_account_name calculation here
         terminal
             .draw(|frame| {
                 draw_frame(
@@ -340,7 +335,8 @@ pub fn run_monitor(
                     args.preset,
                     args.theme,
                     &panels,
-                    current_account_name,
+                    account_names,
+                    cur_account,
                     &trend_days,
                 );
             })
@@ -399,7 +395,8 @@ fn draw_frame(
     preset: Preset,
     theme: Theme,
     panels: &PanelState,
-    current_account: Option<&str>,
+    account_names: &[String],
+    cur_account: usize,
     trend_days: &[TrendDay],
 ) {
     if panels.show_help {
@@ -434,7 +431,7 @@ fn draw_frame(
 
     let mut idx = 0;
     if panels.show_header {
-        draw_header(frame, chunks[idx], snapshot, &pal, current_account, panels);
+        draw_header(frame, chunks[idx], snapshot, &pal, account_names, cur_account, panels);
         idx += 1;
     }
     if panels.show_quota {
@@ -457,13 +454,20 @@ fn draw_frame(
         idx += 1;
     }
     if panels.show_footer {
+        let current_account_name = if account_names.len() > 1 {
+            Some(account_names[cur_account].as_str())
+        } else if account_names.len() == 1 {
+            Some(account_names[0].as_str())
+        } else {
+            None
+        };
         draw_footer(
             frame,
             chunks[idx],
             interval_secs,
             next_refresh_secs,
             &pal,
-            current_account,
+            current_account_name,
         );
     }
 }
@@ -473,12 +477,30 @@ fn draw_header(
     area: Rect,
     snapshot: Option<&StatusSnapshot>,
     pal: &Palette,
-    current_account: Option<&str>,
+    account_names: &[String],
+    cur_account: usize,
     panels: &PanelState,
 ) {
-    let account_prefix = current_account
-        .map(|name| format!(" [{name}]"))
-        .unwrap_or_default();
+    let account_prefix = if account_names.len() > 1 {
+        let mut list = String::new();
+        for (i, name) in account_names.iter().enumerate() {
+            if i > 0 {
+                list.push_str(" | ");
+            }
+            if i == cur_account {
+                list.push('*');
+                list.push_str(name);
+                list.push('*');
+            } else {
+                list.push_str(name);
+            }
+        }
+        format!(" [ {list} ] (Tab to switch)")
+    } else if account_names.len() == 1 {
+        format!(" [{}]", account_names[0])
+    } else {
+        String::new()
+    };
     let vpn_label = if panels.vpn_mode { " VPN" } else { " Dir" };
     let (title, style) = match snapshot {
         Some(s) => {
@@ -1641,7 +1663,8 @@ mod tests {
                     preset,
                     theme,
                     &panels,
-                    None,
+                    &[],
+                    0,
                     &[],
                 );
             })

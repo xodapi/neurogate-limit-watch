@@ -60,56 +60,20 @@ struct GuiAccount {
 }
 
 fn load_gui_accounts() -> (Vec<String>, Vec<GuiAccount>) {
-    use std::fs;
-    use std::path::PathBuf;
-    let home = if cfg!(windows) {
-        std::env::var("APPDATA")
-            .ok()
-            .map(PathBuf::from)
-            .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
+    if let Ok(config) = ng::cli::accounts::AccountsConfig::load() {
+        let names = config.list_names();
+        let configs: Vec<GuiAccount> = names
+            .iter()
+            .filter_map(|n| config.resolve(n).ok())
+            .map(|r| GuiAccount {
+                api_key_env: r.api_key_env.clone(),
+                api_base: r.api_base.clone(),
+            })
+            .collect();
+        (names, configs)
     } else {
-        std::env::var("HOME").ok().map(PathBuf::from)
-    };
-    let Some(home) = home else {
-        return (vec![], vec![]);
-    };
-    let config_dir = if cfg!(windows) {
-        home.join("vimit")
-    } else {
-        home.join(".config").join("vimit")
-    };
-    let path = config_dir.join("accounts.toml");
-    if !path.is_file() {
-        return (vec![], vec![]);
+        (vec![], vec![])
     }
-    let raw = match fs::read_to_string(&path) {
-        Ok(r) => r,
-        Err(_) => return (vec![], vec![]),
-    };
-    #[derive(serde::Deserialize)]
-    struct RawAcct {
-        api_key_env: Option<String>,
-        api_base: Option<String>,
-    }
-    #[derive(serde::Deserialize)]
-    struct RawRoot {
-        accounts: HashMap<String, RawAcct>,
-    }
-    let parsed: RawRoot = match toml::from_str(&raw) {
-        Ok(p) => p,
-        Err(_) => return (vec![], vec![]),
-    };
-    let mut names: Vec<String> = parsed.accounts.keys().cloned().collect();
-    names.sort();
-    let configs: Vec<GuiAccount> = names
-        .iter()
-        .filter_map(|n| parsed.accounts.get(n))
-        .map(|r| GuiAccount {
-            api_key_env: r.api_key_env.clone(),
-            api_base: r.api_base.clone(),
-        })
-        .collect();
-    (names, configs)
 }
 
 fn main() {
@@ -213,10 +177,16 @@ fn main() {
 
         let state = current_acct.clone();
         let configs = account_configs.clone();
+        let weak_app = app.as_weak();
         app.on_account_changed(move |name| {
             if let Some(idx) = account_names.iter().position(|n| n == name.as_str()) {
-                let mut cur = state.lock().unwrap();
-                *cur = Some(configs[idx].clone());
+                {
+                    let mut cur = state.lock().unwrap();
+                    *cur = Some(configs[idx].clone());
+                }
+                if let Some(app) = weak_app.upgrade() {
+                    app.invoke_refresh_requested();
+                }
             }
         });
     }
@@ -384,6 +354,41 @@ fn main() {
             let _ = std::process::Command::new("xdg-open")
                 .arg(&config_dir)
                 .spawn();
+        }
+    });
+
+    app.on_open_accounts_config(move || {
+        let home = if cfg!(windows) {
+            std::env::var("APPDATA")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .or_else(|| {
+                    std::env::var("USERPROFILE")
+                        .ok()
+                        .map(std::path::PathBuf::from)
+                })
+        } else {
+            std::env::var("HOME").ok().map(std::path::PathBuf::from)
+        };
+        if let Some(home) = home {
+            let config_dir = if cfg!(windows) {
+                home.join("vimit")
+            } else {
+                home.join(".config").join("vimit")
+            };
+            let accounts_toml = config_dir.join("accounts.toml");
+            if accounts_toml.exists() {
+                #[cfg(windows)]
+                let _ = std::process::Command::new("explorer")
+                    .arg(&accounts_toml)
+                    .spawn();
+                #[cfg(target_os = "macos")]
+                let _ = std::process::Command::new("open").arg(&accounts_toml).spawn();
+                #[cfg(target_os = "linux")]
+                let _ = std::process::Command::new("xdg-open")
+                    .arg(&accounts_toml)
+                    .spawn();
+            }
         }
     });
 

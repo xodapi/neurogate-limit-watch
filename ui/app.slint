@@ -197,6 +197,7 @@ export component AppWindow inherits Window {
     callback auto-update-changed(bool);
     callback close-overlay();
     callback open-config-dir();
+    callback open-accounts-config();
     in-out property <string> error-text: "";
     in-out property <bool> needs-setup: false;
 
@@ -545,6 +546,11 @@ export component AppWindow inherits Window {
                                     root.current-account = value;
                                     root.account-changed(value);
                                 }
+                            }
+
+                            Button {
+                                text: "📂 Config";
+                                clicked => { root.open-accounts-config(); }
                             }
 
                             Rectangle { }
