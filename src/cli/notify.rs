@@ -68,6 +68,11 @@ impl Notifier {
             return;
         }
         for window in windows {
+            let previous = self
+                .last_levels
+                .get(window.key)
+                .copied()
+                .unwrap_or(AlertLevel::Ok);
             // Check for escalation (warning/danger)
             if let Some(message) = next_notification(&mut self.last_levels, window) {
                 if let Err(error) = fire_desktop_notification(&message) {
@@ -78,7 +83,7 @@ impl Notifier {
                 }
             }
             // Check for recovery (back to ok from warning/danger)
-            if let Some(message) = recovery_notification(&mut self.last_levels, window) {
+            if let Some(message) = recovery_notification(&mut self.last_levels, window, previous) {
                 let _ = fire_desktop_notification(&message);
             }
         }
@@ -116,12 +121,9 @@ fn next_notification(
 fn recovery_notification(
     last_levels: &mut HashMap<String, AlertLevel>,
     window: &ng::WindowState,
+    previous: AlertLevel,
 ) -> Option<NotificationMessage> {
     let level = AlertLevel::from_summary(&window.level);
-    let previous = last_levels
-        .get(window.key)
-        .copied()
-        .unwrap_or(AlertLevel::Ok);
 
     // Only notify on recovery from warning/danger to ok
     if level != AlertLevel::Ok || previous == AlertLevel::Ok {
@@ -318,10 +320,10 @@ mod tests {
         );
 
         // Recovery to ok should fire recovery notification
-        assert!(recovery_notification(&mut last_levels, &ok).is_some());
+        assert!(recovery_notification(&mut last_levels, &ok, AlertLevel::Warning).is_some());
 
         // No duplicate recovery notification
-        assert!(recovery_notification(&mut last_levels, &ok).is_none());
+        assert!(recovery_notification(&mut last_levels, &ok, AlertLevel::Ok).is_none());
     }
 
     #[test]
@@ -330,6 +332,6 @@ mod tests {
         let ok = test_window("5h", "ok", 12.0);
 
         // No prior warning/danger, so no recovery notification
-        assert!(recovery_notification(&mut last_levels, &ok).is_none());
+        assert!(recovery_notification(&mut last_levels, &ok, AlertLevel::Ok).is_none());
     }
 }
