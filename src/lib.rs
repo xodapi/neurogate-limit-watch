@@ -1033,6 +1033,16 @@ pub fn find_dotenv_custom(explicit: Option<&PathBuf>) -> Option<PathBuf> {
     {
         return Some(exe_env);
     }
+
+    // Fallback to ~/.vimit/.env
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok();
+    if let Some(home_path) = home {
+        let home_env = PathBuf::from(home_path).join(".vimit").join(".env");
+        if home_env.is_file() {
+            return Some(home_env);
+        }
+    }
+
     None
 }
 

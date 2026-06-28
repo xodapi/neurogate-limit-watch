@@ -128,6 +128,7 @@ Lookup order:
 1. `--env-file <PATH>`
 2. `.env` in the current directory
 3. `.env` next to the `vimit` executable
+4. `~/.vimit/.env` (or `%USERPROFILE%\.vimit\.env` on Windows)
 
 Real environment variables have priority over `.env` values. `.env` is ignored
 by git and should not be committed.
@@ -166,8 +167,8 @@ vimit doctor — system diagnostics
 
   environment:
        HOME: /home/user
-       NEUROGATE_API_BASE: (not set, will use default)
-       NEUROGATE_API_KEY: (set)
+       VIBEMODE_API_BASE: (not set, will use default)
+       VIBEMODE_API_KEY: (set)
 
   testing API connection to https://r-api.vibemod.pro... OK (4 window(s))
 

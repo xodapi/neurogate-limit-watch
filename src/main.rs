@@ -69,9 +69,7 @@ fn enhance_error(msg: &str) -> String {
             "{}\n  hint: check your system's TLS/CA certificates or proxy settings",
             msg
         )
-    } else if msg.contains("VIBEMODE_API_KEY is required")
-        || msg.contains("NEUROGATE_API_KEY is required")
-    {
+    } else if msg.contains("VIBEMODE_API_KEY is required") {
         format!(
             "{}\n  hint: set VIBEMODE_API_KEY, use --demo, or run vimit --init",
             msg
@@ -134,6 +132,26 @@ fn real_main() -> Result<i32, String> {
     let mut args = merge_args_with_config(cli_args, &merged);
     if args.vpn && args.api_base.is_none() {
         args.api_base = Some(ng::VPN_API_BASE.to_string());
+    }
+    if args.overlay {
+        let current = env::current_exe().map_err(|e| format!("cannot find current exe: {e}"))?;
+        let gui_path = current.with_file_name("vimit-gui.exe");
+        if !gui_path.exists() {
+            return Err("vimit-gui.exe not found in the same directory".to_string());
+        }
+        let mut cmd = std::process::Command::new(gui_path);
+        cmd.arg("--overlay");
+        if args.demo {
+            cmd.arg("--demo");
+        }
+        if args.output == cli::args::OutputMode::Compact {
+            cmd.arg("--compact");
+        }
+        if let Some(mock) = &args.mock {
+            cmd.arg("--mock").arg(mock);
+        }
+        let _ = cmd.spawn().map_err(|e| format!("failed to launch vimit-gui: {e}"))?;
+        return Ok(0);
     }
 
     if args.trend {
@@ -226,6 +244,7 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         mock: args.mock.or_else(|| merged.mock.clone()),
         output: args.output,
         daily_limit: args.daily_limit,
+        overlay: args.overlay,
         monitor: args.monitor || merged.monitor,
         preset: if args.preset == cli::args::Preset::Full
             && merged.preset != cli::args::Preset::Full
