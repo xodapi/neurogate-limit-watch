@@ -135,9 +135,12 @@ fn real_main() -> Result<i32, String> {
     }
     if args.overlay {
         let current = env::current_exe().map_err(|e| format!("cannot find current exe: {e}"))?;
+        #[cfg(windows)]
         let gui_path = current.with_file_name("vimit-gui.exe");
+        #[cfg(not(windows))]
+        let gui_path = current.with_file_name("vimit-gui");
         if !gui_path.exists() {
-            return Err("vimit-gui.exe not found in the same directory".to_string());
+            return Err("vimit-gui executable not found in the same directory".to_string());
         }
         let mut cmd = std::process::Command::new(gui_path);
         cmd.arg("--overlay");
