@@ -622,6 +622,15 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let request_percent =
         ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
 
+    let donut_remaining = match window.credits.as_ref() {
+        Some(m) => ng::short_number(m.remaining),
+        None => "н/д".to_string(),
+    };
+    let donut_limit = match window.credits.as_ref() {
+        Some(m) => ng::short_number(m.limit),
+        None => "н/д".to_string(),
+    };
+
     match key {
         "5h" => {
             app.set_five_level(level);
@@ -655,6 +664,8 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
             app.set_week_percent(percent);
             app.set_week_credit_percent(credit_percent);
             app.set_week_request_percent(request_percent);
+            app.set_donut_remaining(donut_remaining.into());
+            app.set_donut_limit(donut_limit.into());
         }
         "30d" => {
             app.set_month_level(level);
