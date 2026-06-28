@@ -462,7 +462,7 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
                 &error
             };
             app.set_status_text(msg.into());
-            app.set_source_text(format!("error: {error}").into());
+            app.set_error_text(msg.into());
         }
     }
 }
@@ -482,7 +482,7 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let reset: SharedString = window.reset.clone().into();
     let credits: SharedString = ng::metric_text("кредиты", window.credits.as_ref()).into();
     let requests: SharedString = ng::metric_text("запросы", window.requests.as_ref()).into();
-    let percent_text: SharedString = format!("{} пик", ng::format_percent(window.percent)).into();
+    let percent_text: SharedString = format!("{} макс", ng::format_percent(window.percent)).into();
     let percent = window.percent as f32;
     let credit_percent =
         ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;

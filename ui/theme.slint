@@ -1,0 +1,11 @@
+export global Theme {
+  in-out property <bool> dark-mode: true;
+  out property <color> bg-primary: dark-mode ? #0f131a : #f8fafc;
+  out property <color> bg-card:    dark-mode ? #1a202c : #ffffff;
+  out property <color> border:     dark-mode ? #334155 : #e2e8f0;
+  out property <color> text-primary:   dark-mode ? #f1f5f9 : #0f172a;
+  out property <color> text-muted:     dark-mode ? #64748b : #94a3b8;
+  out property <color> success: #22c55e;
+  out property <color> warning: #f59e0b;
+  out property <color> danger:  #ef4444;
+}

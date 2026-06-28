@@ -795,7 +795,7 @@ pub fn dashboard_status(windows: &[WindowState]) -> String {
         .fold(0.0, f64::max);
     let level = window_level_from_peak(peak);
     format!(
-        "квота: {level} | пик {} | обновлено {}",
+        "квота: {level} | макс {} | обновлено {}",
         format_percent(peak),
         Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
     )
