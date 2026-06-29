@@ -864,7 +864,6 @@ export component AppWindow inherits Window {
         border-color: #30363d;
         border-width: 1px;
         border-radius: 12px;
-        padding: 12px;
         
         VerticalLayout {
             padding: 12px;
@@ -909,7 +908,6 @@ export component AppWindow inherits Window {
                     font-size: 12px;
                     color: #7d8590;
                     vertical-alignment: bottom;
-                    padding-bottom: 4px;
                 }
                 Rectangle {}
             }
@@ -974,8 +972,10 @@ export component AppWindow inherits Window {
                 Rectangle {
                     background: #1f2937;
                     border-radius: 10px;
-                    padding-left: 8px; padding-right: 8px;
-                    Text { text: root.five-reset; font-size: 11px; color: #2a78d6; }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { text: root.five-reset; font-size: 11px; color: #2a78d6; }
+                    }
                 }
             }
         }
