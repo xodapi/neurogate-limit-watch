@@ -2,11 +2,11 @@
 
 use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tray_icon::{
     Icon, MouseButton, TrayIcon, TrayIconBuilder, TrayIconEvent,
     menu::{Menu, MenuEvent, MenuItem},
@@ -126,6 +126,19 @@ fn main() {
         let _ = slint::quit_event_loop();
     });
 
+    let countdown_timer = Timer::default();
+    let weak = app.as_weak();
+    countdown_timer.start(TimerMode::Repeated, Duration::from_secs(1), move || {
+        if let Some(app) = weak.upgrade() {
+            let seconds = app.get_overlay_reset_seconds();
+            if seconds > 0 {
+                let next = seconds - 1;
+                app.set_overlay_reset_seconds(next);
+                app.set_overlay_reset_text(format_overlay_countdown(next).into());
+            }
+        }
+    });
+
     // Listen for Tray Events
     let tray_timer = Timer::default();
     let weak = app.as_weak();
@@ -165,6 +178,7 @@ fn main() {
 
     let refresh_gen = Arc::new(AtomicU64::new(0));
     let is_refreshing = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let overlay_history = Arc::new(Mutex::new(OverlayHistory::default()));
 
     let (account_names, account_configs) = load_gui_accounts();
     let current_acct = Arc::new(Mutex::new(None::<GuiAccount>));
@@ -201,6 +215,7 @@ fn main() {
     let router_clone = router.clone();
     let gen1 = refresh_gen.clone();
     let is_ref1 = is_refreshing.clone();
+    let history1 = overlay_history.clone();
     app.on_refresh_requested(move || {
         start_refresh(
             weak.clone(),
@@ -212,6 +227,7 @@ fn main() {
             ng::DEFAULT_DANGER_THRESHOLD,
             gen1.clone(),
             is_ref1.clone(),
+            history1.clone(),
         );
     });
 
@@ -221,6 +237,7 @@ fn main() {
     let router_clone = router.clone();
     let gen2 = refresh_gen.clone();
     let is_ref2 = is_refreshing.clone();
+    let history2 = overlay_history.clone();
     app.on_demo_requested(move || {
         start_refresh(
             weak.clone(),
@@ -232,6 +249,7 @@ fn main() {
             ng::DEFAULT_DANGER_THRESHOLD,
             gen2.clone(),
             is_ref2.clone(),
+            history2.clone(),
         );
     });
 
@@ -241,6 +259,7 @@ fn main() {
     let router_clone = router.clone();
     let gen3 = refresh_gen.clone();
     let is_ref3 = is_refreshing.clone();
+    let history3 = overlay_history.clone();
     app.on_settings_changed(move |warning, danger| {
         start_refresh(
             weak.clone(),
@@ -252,6 +271,7 @@ fn main() {
             danger as f64,
             gen3.clone(),
             is_ref3.clone(),
+            history3.clone(),
         );
     });
 
@@ -262,6 +282,7 @@ fn main() {
     let router_clone = router.clone();
     let gen4 = refresh_gen.clone();
     let is_ref4 = is_refreshing.clone();
+    let history4 = overlay_history.clone();
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
         start_refresh(
             weak.clone(),
@@ -273,6 +294,7 @@ fn main() {
             ng::DEFAULT_DANGER_THRESHOLD,
             gen4.clone(),
             is_ref4.clone(),
+            history4.clone(),
         );
     });
 
@@ -286,6 +308,7 @@ fn main() {
         ng::DEFAULT_DANGER_THRESHOLD,
         refresh_gen.clone(),
         is_refreshing.clone(),
+        overlay_history.clone(),
     );
 
     if let Ok(dotenv) = gui_load_dotenv() {
@@ -451,6 +474,25 @@ struct GuiDashboardResult {
     day_trend_data: Vec<f32>,
     week_trend_data: Vec<f32>,
     month_trend_data: Vec<f32>,
+    overlay: OverlayState,
+}
+
+#[derive(Default)]
+struct OverlayHistory {
+    last_used: Option<f64>,
+    last_at: Option<Instant>,
+    samples: VecDeque<f32>,
+}
+
+struct OverlayState {
+    credit_rate_text: String,
+    token_rate_text: String,
+    percent_hour_text: String,
+    spark_data: Vec<f32>,
+    delta_text: String,
+    delta_level: String,
+    reset_label: String,
+    reset_seconds: i32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -464,6 +506,7 @@ fn start_refresh(
     danger: f64,
     generation: Arc<AtomicU64>,
     is_refreshing: Arc<std::sync::atomic::AtomicBool>,
+    overlay_history: Arc<Mutex<OverlayHistory>>,
 ) {
     if is_refreshing.swap(true, Ordering::SeqCst) {
         return;
@@ -471,7 +514,15 @@ fn start_refresh(
 
     let my_gen = generation.fetch_add(1, Ordering::Relaxed) + 1;
     thread::spawn(move || {
-        let result = load_dashboard(demo, &http, &account, warning, danger, &router);
+        let result = load_dashboard(
+            demo,
+            &http,
+            &account,
+            warning,
+            danger,
+            &router,
+            &overlay_history,
+        );
         if generation.load(Ordering::Relaxed) != my_gen {
             is_refreshing.store(false, Ordering::SeqCst);
             return;
@@ -548,6 +599,14 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
                 .unwrap_or(0.0);
             app.set_token_rate_raw(raw_rate);
             app.set_active_endpoint_label(res.active_endpoint_label.into());
+            app.set_overlay_credit_rate_text(res.overlay.credit_rate_text.into());
+            app.set_overlay_token_rate_text(res.overlay.token_rate_text.into());
+            app.set_overlay_percent_hour_text(res.overlay.percent_hour_text.into());
+            app.set_overlay_delta_text(res.overlay.delta_text.into());
+            app.set_overlay_delta_level(res.overlay.delta_level.into());
+            app.set_overlay_reset_label(res.overlay.reset_label.into());
+            app.set_overlay_reset_seconds(res.overlay.reset_seconds);
+            app.set_overlay_reset_text(format_overlay_countdown(res.overlay.reset_seconds).into());
 
             if let Some(latest) = ng::cli::update::latest_checked_version() {
                 app.set_new_version_label(latest.into());
@@ -561,6 +620,7 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
             app.set_day_trend_data(create_model(res.day_trend_data));
             app.set_week_trend_data(create_model(res.week_trend_data));
             app.set_month_trend_data(create_model(res.month_trend_data));
+            app.set_overlay_spark_data(create_model(res.overlay.spark_data));
 
             apply_window(
                 app,
@@ -697,6 +757,7 @@ fn load_dashboard(
     warning: f64,
     danger: f64,
     router: &Arc<Mutex<ng::Router>>,
+    overlay_history: &Arc<Mutex<OverlayHistory>>,
 ) -> Result<GuiDashboardResult, String> {
     let dotenv = gui_load_dotenv()?;
     let config = runtime_config(&dotenv, account);
@@ -731,6 +792,7 @@ fn load_dashboard(
     let windows = ng::summarize_me(&payload, warning, danger);
     let status = ng::dashboard_status(&windows);
     let agent = ng::read_agent_status(&config.abtop_bin);
+    let overlay = build_overlay_state(&windows, &agent.token_rate, overlay_history);
 
     // Save snapshot to TrendStore and load trend data
     let mut five_trend_data = Vec::new();
@@ -793,7 +855,138 @@ fn load_dashboard(
         day_trend_data,
         week_trend_data,
         month_trend_data,
+        overlay,
     })
+}
+
+fn build_overlay_state(
+    windows: &[ng::WindowState],
+    token_rate_text: &str,
+    history: &Arc<Mutex<OverlayHistory>>,
+) -> OverlayState {
+    let now = Instant::now();
+    let five = windows.iter().find(|window| window.key == "5h");
+    let current_used = five.and_then(|window| window.credits.as_ref().map(|metric| metric.used));
+    let credit_limit = five
+        .and_then(|window| window.credits.as_ref().map(|metric| metric.limit))
+        .unwrap_or(0.0);
+
+    let mut history = history.lock().unwrap();
+    let mut credit_rate = 0.0f32;
+    if let (Some(used), Some(last_used), Some(last_at)) =
+        (current_used, history.last_used, history.last_at)
+    {
+        let elapsed_min = now.duration_since(last_at).as_secs_f64() / 60.0;
+        if elapsed_min > 0.0 {
+            credit_rate = ((used - last_used).max(0.0) / elapsed_min) as f32;
+        }
+    }
+
+    if let Some(used) = current_used {
+        history.last_used = Some(used);
+        history.last_at = Some(now);
+    }
+
+    if history.samples.len() == 15 {
+        history.samples.pop_front();
+    }
+    history.samples.push_back(credit_rate.max(0.0));
+
+    let samples: Vec<f32> = history.samples.iter().copied().collect();
+    let spark_data = scale_samples(&samples);
+    let token_rate = parse_rate_value(token_rate_text).unwrap_or(credit_rate * 750.0);
+    let percent_hour = if credit_limit > 0.0 {
+        (credit_rate as f64 / credit_limit * 60.0 * 100.0) as f32
+    } else {
+        0.0
+    };
+    let (delta_text, delta_level) = overlay_delta(&samples);
+    let (reset_label, reset_seconds) = nearest_reset(windows);
+
+    OverlayState {
+        credit_rate_text: format!("{} кред/мин", one_decimal_local(credit_rate)),
+        token_rate_text: format!("{} токены/мин", one_decimal_local(token_rate)),
+        percent_hour_text: format!("{}%/час", one_decimal_local(percent_hour)),
+        spark_data,
+        delta_text,
+        delta_level,
+        reset_label,
+        reset_seconds,
+    }
+}
+
+fn scale_samples(samples: &[f32]) -> Vec<f32> {
+    let max = samples.iter().copied().fold(0.0f32, f32::max).max(1.0);
+    samples
+        .iter()
+        .map(|value| ((*value / max) * 100.0).clamp(2.0, 100.0))
+        .collect()
+}
+
+fn overlay_delta(samples: &[f32]) -> (String, String) {
+    let Some((&latest, previous)) = samples.split_last() else {
+        return ("стабильно".to_string(), "ok".to_string());
+    };
+    if previous.is_empty() {
+        return ("старт".to_string(), "ok".to_string());
+    }
+    let avg = previous.iter().sum::<f32>() / previous.len() as f32;
+    if avg <= 0.05 {
+        if latest <= 0.05 {
+            return ("стабильно".to_string(), "ok".to_string());
+        }
+        return ("новый расход".to_string(), "warning".to_string());
+    }
+    let delta = ((latest - avg) / avg) * 100.0;
+    let level = if delta >= 50.0 {
+        "danger"
+    } else if delta >= 15.0 {
+        "warning"
+    } else {
+        "ok"
+    };
+    let sign = if delta >= 0.0 { "+" } else { "" };
+    (
+        format!("{sign}{}% к норме", one_decimal_local(delta)),
+        level.to_string(),
+    )
+}
+
+fn nearest_reset(windows: &[ng::WindowState]) -> (String, i32) {
+    let nearest = windows
+        .iter()
+        .filter_map(|window| {
+            window
+                .reset_in_seconds
+                .map(|seconds| (window.key, seconds.max(0)))
+        })
+        .min_by_key(|(_, seconds)| *seconds);
+
+    match nearest {
+        Some((key, seconds)) => (
+            format!("сброс {key} окна"),
+            seconds.min(i32::MAX as i64) as i32,
+        ),
+        None => ("сброс окна".to_string(), -1),
+    }
+}
+
+fn format_overlay_countdown(seconds: i32) -> String {
+    if seconds < 0 {
+        "unknown".to_string()
+    } else {
+        ng::format_duration_secs(seconds as i64)
+    }
+}
+
+fn parse_rate_value(text: &str) -> Option<f32> {
+    text.split_whitespace()
+        .next()
+        .and_then(|value| value.replace(',', ".").parse::<f32>().ok())
+}
+
+fn one_decimal_local(value: f32) -> String {
+    format!("{value:.1}").replace('.', ",")
 }
 
 fn runtime_config(
