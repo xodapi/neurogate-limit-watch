@@ -75,6 +75,11 @@ pub fn run_doctor() -> Result<i32, String> {
                 "NEUROGATE_API_BASE"
             };
             println!("       {var_name}: {v}");
+            if var_name != "VIBEMODE_API_BASE" {
+                println!(
+                    "       hint: rename {var_name} to VIBEMODE_API_BASE (old name is deprecated)"
+                );
+            }
         }
         Err(_) => println!("       VIBEMODE_API_BASE: (not set, will use default)"),
     }
@@ -91,6 +96,11 @@ pub fn run_doctor() -> Result<i32, String> {
                 "NEUROGATE_API_KEY"
             };
             println!("       {var_name}: (set)");
+            if var_name != "VIBEMODE_API_KEY" {
+                println!(
+                    "       hint: rename {var_name} to VIBEMODE_API_KEY (old name is deprecated)"
+                );
+            }
         }
         Err(_) => println!("       VIBEMODE_API_KEY: (not set, demo data only)"),
     }

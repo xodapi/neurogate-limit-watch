@@ -64,8 +64,11 @@ impl DailyFile {
         }
         let raw = toml::to_string_pretty(self)
             .map_err(|e| format!("cannot serialize daily config: {e}"))?;
-        fs::write(&path, raw)
-            .map_err(|e| format!("cannot save daily config {}: {e}", path.display()))?;
+        let tmp_path = path.with_extension("toml.tmp");
+        fs::write(&tmp_path, &raw)
+            .map_err(|e| format!("cannot write daily config {}: {e}", tmp_path.display()))?;
+        fs::rename(&tmp_path, &path)
+            .map_err(|e| format!("cannot rename daily config {}: {e}", path.display()))?;
         Ok(())
     }
 
@@ -83,6 +86,41 @@ impl DailyFile {
             }
             config.last_credits_7d = current_remaining_7d;
         }
+    }
+
+    pub fn atomic_update(current_remaining_7d: f64) -> Result<Self, String> {
+        let Some(path) = daily_config_path() else {
+            return Ok(Self::default());
+        };
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        use fs3::FileExt;
+        let mut file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .map_err(|e| format!("cannot open daily config: {e}"))?;
+
+        let _ = file.lock_exclusive();
+
+        let mut raw = String::new();
+        use std::io::{Read, Seek, SeekFrom, Write};
+        let _ = file.read_to_string(&mut raw);
+
+        let mut df: Self = toml::from_str(&raw).unwrap_or_default();
+        df.update(current_remaining_7d);
+
+        let new_raw = toml::to_string_pretty(&df).unwrap_or_default();
+        let _ = file.seek(SeekFrom::Start(0));
+        let _ = file.set_len(0);
+        let _ = file.write_all(new_raw.as_bytes());
+        let _ = file.unlock();
+
+        Ok(df)
     }
 
     pub fn get_state(&self, limit_7d: f64, override_limit: Option<f64>) -> crate::DailyState {

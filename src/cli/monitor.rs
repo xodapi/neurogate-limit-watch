@@ -162,8 +162,9 @@ pub fn collect_status(
     };
     if let Some(w7d) = snapshot.windows.clone().iter().find(|w| w.key == "7d") {
         if let Some(c) = w7d.credits.as_ref() {
-            daily_file.update(c.remaining);
-            let _ = daily_file.save();
+            if let Ok(updated_file) = crate::cli::daily::DailyFile::atomic_update(c.remaining) {
+                *daily_file = updated_file;
+            }
             let daily_state = daily_file.get_state(c.limit, args.daily_limit);
 
             snapshot.windows.insert(
@@ -320,12 +321,7 @@ pub fn run_monitor(
             .saturating_duration_since(Instant::now())
             .as_secs();
 
-        let current_account_name = if has_accounts && total_accounts > 1 {
-            Some(account_names[cur_account].as_str())
-        } else {
-            None
-        };
-
+        // Removed current_account_name calculation here
         terminal
             .draw(|frame| {
                 draw_frame(
@@ -340,7 +336,8 @@ pub fn run_monitor(
                     args.preset,
                     args.theme,
                     &panels,
-                    current_account_name,
+                    account_names,
+                    cur_account,
                     &trend_days,
                 );
             })
@@ -399,7 +396,8 @@ fn draw_frame(
     preset: Preset,
     theme: Theme,
     panels: &PanelState,
-    current_account: Option<&str>,
+    account_names: &[String],
+    cur_account: usize,
     trend_days: &[TrendDay],
 ) {
     if panels.show_help {
@@ -434,7 +432,15 @@ fn draw_frame(
 
     let mut idx = 0;
     if panels.show_header {
-        draw_header(frame, chunks[idx], snapshot, &pal, current_account, panels);
+        draw_header(
+            frame,
+            chunks[idx],
+            snapshot,
+            &pal,
+            account_names,
+            cur_account,
+            panels,
+        );
         idx += 1;
     }
     if panels.show_quota {
@@ -457,13 +463,20 @@ fn draw_frame(
         idx += 1;
     }
     if panels.show_footer {
+        let current_account_name = if account_names.len() > 1 {
+            Some(account_names[cur_account].as_str())
+        } else if account_names.len() == 1 {
+            Some(account_names[0].as_str())
+        } else {
+            None
+        };
         draw_footer(
             frame,
             chunks[idx],
             interval_secs,
             next_refresh_secs,
             &pal,
-            current_account,
+            current_account_name,
         );
     }
 }
@@ -473,12 +486,30 @@ fn draw_header(
     area: Rect,
     snapshot: Option<&StatusSnapshot>,
     pal: &Palette,
-    current_account: Option<&str>,
+    account_names: &[String],
+    cur_account: usize,
     panels: &PanelState,
 ) {
-    let account_prefix = current_account
-        .map(|name| format!(" [{name}]"))
-        .unwrap_or_default();
+    let account_prefix = if account_names.len() > 1 {
+        let mut list = String::new();
+        for (i, name) in account_names.iter().enumerate() {
+            if i > 0 {
+                list.push_str(" | ");
+            }
+            if i == cur_account {
+                list.push('*');
+                list.push_str(name);
+                list.push('*');
+            } else {
+                list.push_str(name);
+            }
+        }
+        format!(" [ {list} ] (Tab to switch)")
+    } else if account_names.len() == 1 {
+        format!(" [{}]", account_names[0])
+    } else {
+        String::new()
+    };
     let vpn_label = if panels.vpn_mode { " VPN" } else { " Dir" };
     let (title, style) = match snapshot {
         Some(s) => {
@@ -601,10 +632,16 @@ fn draw_body(
             );
         }
     } else {
-        let waiting = Paragraph::new(Span::styled(
-            "Collecting VibeMode status...",
-            pal.muted_style(),
-        ))
+        let waiting = Paragraph::new(vec![
+            Line::from(Span::styled(
+                "Collecting VibeMode status...",
+                pal.muted_style(),
+            )),
+            Line::from(Span::styled(
+                "Press r to refresh, ? for help",
+                pal.muted_style(),
+            )),
+        ])
         .block(
             Block::default()
                 .title("Limits")
@@ -839,35 +876,36 @@ fn draw_footer(
     let has_multi_account = current_account.is_some();
     let height = area.height;
     let footer = if height <= 1 {
-        let mut text = format!("q quit | r refresh | {interval_secs}s/{next_refresh_secs}s");
+        let mut text = "? help | 5 trends".to_string();
         if has_multi_account {
-            text = format!("Tab acct | {text}");
+            text = format!("{text} | Tab account");
         }
+        text = format!("{text} | q quit | r refresh | {interval_secs}s/{next_refresh_secs}s");
         if let Some(latest) = super::update::latest_checked_version() {
-            text = format!("{text} | ⚠️ Update v{latest}!");
+            text = format!("{text} | ⚠ Update v{latest}!");
         }
         Paragraph::new(Line::from(vec![Span::styled(text, pal.muted_style())]))
     } else {
         let mut spans = vec![
-            Span::styled(" q ", pal.key_binding_style()),
-            Span::raw("quit  "),
-            Span::styled(" r ", pal.key_binding_style()),
-            Span::raw(format!(
-                "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
-            )),
+            Span::styled(" ? ", pal.key_binding_style()),
+            Span::raw("help  "),
+            Span::styled(" 5 ", pal.key_binding_style()),
+            Span::raw("trends  "),
         ];
         if has_multi_account {
-            let mut with_tab = vec![
-                Span::styled(" Tab ", pal.key_binding_style()),
-                Span::raw("account  "),
-            ];
-            with_tab.extend(spans);
-            spans = with_tab;
+            spans.push(Span::styled(" Tab ", pal.key_binding_style()));
+            spans.push(Span::raw("account  "));
         }
+        spans.push(Span::styled(" q ", pal.key_binding_style()));
+        spans.push(Span::raw("quit  "));
+        spans.push(Span::styled(" r ", pal.key_binding_style()));
+        spans.push(Span::raw(format!(
+            "refresh  auto {interval_secs}s  next {next_refresh_secs}s"
+        )));
         if let Some(latest) = super::update::latest_checked_version() {
             spans.push(Span::raw("  "));
             spans.push(Span::styled(
-                format!("⚠️  Update v{latest} available! Run `vimit update`"),
+                format!("⚠ Update v{latest}"),
                 pal.bold_level_style("warning"),
             ));
         }
@@ -1326,7 +1364,7 @@ pub fn render_monitor_lines(
 
     lines.push(fit_text(
         &format!(
-            "q quit | Esc quit | r refresh now | auto {}s | next {}s | .env next to binary supported",
+            "? help | 5 trends | Tab account | q quit | r refresh | auto {}s | next {}s",
             interval_secs, next_refresh_secs
         ),
         width,
@@ -1641,7 +1679,8 @@ mod tests {
                     preset,
                     theme,
                     &panels,
-                    None,
+                    &[],
+                    0,
                     &[],
                 );
             })
