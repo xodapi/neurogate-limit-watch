@@ -279,14 +279,17 @@ export component AppWindow inherits Window {
     title: "vimit-gui";
     in-out property <bool> is-overlay: false;
     in-out property <bool> is-compact: false;
+    in-out property <bool> overlay-pinned: true;
+    in-out property <int> overlay-unit: 0;
+    in-out property <int> overlay-reset-seconds: -1;
     in property <float> token-rate-raw: 0.0;
 
     preferred-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : 1120px;
-    preferred-height: root.is-overlay ? (root.is-compact ? 40px : 340px) : 680px;
+    preferred-height: root.is-overlay ? (root.is-compact ? 40px : 260px) : 680px;
     min-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : 860px;
-    min-height: root.is-overlay ? (root.is-compact ? 40px : 340px) : 620px;
+    min-height: root.is-overlay ? (root.is-compact ? 40px : 260px) : 620px;
     no-frame: root.is-overlay;
-    always-on-top: root.is-overlay;
+    always-on-top: root.is-overlay && root.overlay-pinned;
     background: root.is-overlay ? transparent : Theme.bg-primary;
 
 
@@ -310,6 +313,14 @@ export component AppWindow inherits Window {
     in property <[float]> day-trend-data: [];
     in property <[float]> week-trend-data: [];
     in property <[float]> month-trend-data: [];
+    in property <[float]> overlay-spark-data: [];
+    in property <string> overlay-credit-rate-text: "0,0 кред/мин";
+    in property <string> overlay-token-rate-text: "0,0 токены/мин";
+    in property <string> overlay-percent-hour-text: "0,0%/час";
+    in property <string> overlay-delta-text: "стабильно";
+    in property <string> overlay-delta-level: "ok";
+    in property <string> overlay-reset-label: "сброс окна";
+    in property <string> overlay-reset-text: "unknown";
     in-out property <bool> stealth-mode: false;
     in property <string> active-endpoint-label: "";
     in property <int> api-offline-min: -1;
@@ -955,15 +966,14 @@ export component AppWindow inherits Window {
 
     if (root.is-overlay && !root.is-compact) : Rectangle {
         background: #0d1117;
-        border-color: #30363d;
+        border-color: root.overlay-pinned ? #2a78d6 : #30363d;
         border-width: 1px;
         border-radius: 12px;
         
         VerticalLayout {
-            padding: 12px;
-            spacing: 12px;
+            padding: 10px;
+            spacing: 8px;
             
-            // Header
             HorizontalLayout {
                 Text {
                     text: "vimit · VibeMode";
@@ -973,40 +983,52 @@ export component AppWindow inherits Window {
                 }
                 Rectangle {}
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: 6px;
+                    Button {
+                        text: root.overlay-pinned ? "●" : "○";
+                        width: 24px;
+                        height: 22px;
+                        clicked => { root.overlay-pinned = !root.overlay-pinned; }
+                    }
                     Button {
                         text: "-";
                         width: 24px;
-                        height: 24px;
+                        height: 22px;
                         clicked => { root.is-compact = true; }
                     }
                     Button {
                         text: "x";
                         width: 24px;
-                        height: 24px;
+                        height: 22px;
                         clicked => { root.close-overlay(); }
                     }
                 }
             }
             
-            // Rate row
             HorizontalLayout {
                 Text {
-                    text: root.stealth-mode ? "***" : "\{round(root.token-rate-raw)}";
+                    text: root.stealth-mode ? "***" : root.overlay-unit == 0 ? root.overlay-credit-rate-text : root.overlay-unit == 1 ? root.overlay-token-rate-text : root.overlay-percent-hour-text;
                     font-size: 28px;
                     color: #e6edf3;
                     font-weight: 700;
                 }
-                Text {
-                    text: " " + root.token-rate-text;
-                    font-size: 12px;
-                    color: #7d8590;
-                    vertical-alignment: bottom;
-                }
                 Rectangle {}
+                Rectangle {
+                    background: root.overlay-delta-level == "danger" ? #3d1a1a : root.overlay-delta-level == "warning" ? #3a2a1a : #1f3a25;
+                    border-radius: 4px;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        Text {
+                            text: root.overlay-delta-text;
+                            font-size: 11px;
+                            color: root.overlay-delta-level == "danger" ? #f85149 : root.overlay-delta-level == "warning" ? #d29922 : #3fb950;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
             }
             
-            // Windows
             VerticalLayout {
                 spacing: 6px;
                 HorizontalLayout {
@@ -1015,6 +1037,7 @@ export component AppWindow inherits Window {
                         Rectangle { x: 0; width: parent.width * (root.five-percent / 100); background: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
                     Text { text: root.stealth-mode ? "***" : "\{round(root.five-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.five-percent >= 90 ? #f85149 : root.five-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.five-reset; width: 46px; horizontal-alignment: right; font-size: 10px; color: #484f58; vertical-alignment: center; }
                 }
                 HorizontalLayout {
                     Text { text: "24h"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
@@ -1022,6 +1045,7 @@ export component AppWindow inherits Window {
                         Rectangle { x: 0; width: parent.width * (root.day-percent / 100); background: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
                     Text { text: root.stealth-mode ? "***" : "\{round(root.day-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.day-percent >= 90 ? #f85149 : root.day-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.day-reset; width: 46px; horizontal-alignment: right; font-size: 10px; color: #484f58; vertical-alignment: center; }
                 }
                 HorizontalLayout {
                     Text { text: "7d"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
@@ -1029,6 +1053,7 @@ export component AppWindow inherits Window {
                         Rectangle { x: 0; width: parent.width * (root.week-percent / 100); background: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
                     Text { text: root.stealth-mode ? "***" : "\{round(root.week-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.week-percent >= 90 ? #f85149 : root.week-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.week-reset; width: 46px; horizontal-alignment: right; font-size: 10px; color: #484f58; vertical-alignment: center; }
                 }
                 HorizontalLayout {
                     Text { text: "30d"; width: 28px; font-size: 11px; color: #7d8590; vertical-alignment: center; }
@@ -1036,24 +1061,24 @@ export component AppWindow inherits Window {
                         Rectangle { x: 0; width: parent.width * (root.month-percent / 100); background: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; border-radius: 3px; }
                     }
                     Text { text: root.stealth-mode ? "***" : "\{round(root.month-percent)}%"; width: 44px; horizontal-alignment: right; font-size: 11px; color: root.month-percent >= 90 ? #f85149 : root.month-percent >= 75 ? #d29922 : #3fb950; vertical-alignment: center; }
+                    Text { text: root.month-reset; width: 46px; horizontal-alignment: right; font-size: 10px; color: #484f58; vertical-alignment: center; }
                 }
             }
             
             Rectangle { height: 1px; background: #21262d; }
             
-            // Sparkline
             VerticalLayout {
                 spacing: 4px;
-                Text { text: "расход за 15 мин"; font-size: 10px; color: #484f58; }
+                Text { text: "расход за 15 polling-точек"; font-size: 10px; color: #484f58; }
                 HorizontalLayout {
-                    height: 36px;
+                    height: 30px;
                     spacing: 2px;
                     alignment: start;
-                    for val in root.five-trend-data : Rectangle {
+                    for val in root.overlay-spark-data : Rectangle {
                         width: 14px;
                         height: max(2px, parent.height * val / 100);
                         y: parent.height - self.height;
-                        background: val >= 90 ? #f85149 : val >= 75 ? #d29922 : #3fb950;
+                        background: root.overlay-delta-level == "danger" ? #f85149 : root.overlay-delta-level == "warning" ? #d29922 : #3fb950;
                         border-radius: 2px;
                         opacity: 0.8;
                     }
@@ -1061,16 +1086,23 @@ export component AppWindow inherits Window {
             }
             
             HorizontalLayout {
-                Text { text: "сброс 5h окна"; font-size: 11px; color: #7d8590; }
+                Text { text: root.overlay-reset-label; font-size: 11px; color: #7d8590; }
                 Rectangle {}
                 Rectangle {
                     background: #1f2937;
                     border-radius: 10px;
                     HorizontalLayout {
                         padding-left: 8px; padding-right: 8px;
-                        Text { text: root.five-reset; font-size: 11px; color: #2a78d6; }
+                        Text { text: root.overlay-reset-text; font-size: 11px; color: #2a78d6; }
                     }
                 }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                Button { text: root.overlay-unit == 0 ? "✓ кред/мин" : "кред/мин"; clicked => { root.overlay-unit = 0; } }
+                Button { text: root.overlay-unit == 1 ? "✓ ток/мин" : "ток/мин"; clicked => { root.overlay-unit = 1; } }
+                Button { text: root.overlay-unit == 2 ? "✓ %/час" : "%/час"; clicked => { root.overlay-unit = 2; } }
             }
         }
     }
@@ -1091,7 +1123,7 @@ export component AppWindow inherits Window {
             }
             VerticalLayout {
                 Text {
-                    text: "5h: " + (root.stealth-mode ? "***" : "\{round(root.five-percent)}%") + " · " + (root.stealth-mode ? "***" : "\{round(root.token-rate-raw)} " + root.token-rate-text);
+                    text: "5h: " + (root.stealth-mode ? "***" : "\{round(root.five-percent)}%") + " · " + (root.stealth-mode ? "***" : root.overlay-unit == 0 ? root.overlay-credit-rate-text : root.overlay-unit == 1 ? root.overlay-token-rate-text : root.overlay-percent-hour-text);
                     font-size: 12px; color: #e6edf3; font-weight: 700;
                 }
                 Text {
