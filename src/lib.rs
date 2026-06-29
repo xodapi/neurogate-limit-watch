@@ -9,14 +9,15 @@ pub use parse::*;
 
 use chrono::{SecondsFormat, Utc};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
 pub static OFFLINE_SINCE: Mutex<Option<Instant>> = Mutex::new(None);
+static DEPRECATED_ENV_WARNINGS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 pub fn update_offline_state(is_error: bool) -> Option<u64> {
     let mut state = OFFLINE_SINCE.lock().unwrap();
@@ -483,18 +484,29 @@ pub fn config_value(key: &str, dotenv: &HashMap<String, String>) -> Option<Strin
     for k in &keys {
         if let Some(val) = env::var(k).ok().filter(|v| !v.is_empty()) {
             if let Some(suffix) = k.strip_prefix("NEUROGATE_") {
-                eprintln!("warning: {k} is deprecated, rename to VIBEMODE_{suffix}");
+                warn_deprecated_env_once(k, suffix);
             }
             return Some(val);
         }
         if let Some(val) = dotenv.get(*k).cloned().filter(|v| !v.is_empty()) {
             if let Some(suffix) = k.strip_prefix("NEUROGATE_") {
-                eprintln!("warning: {k} is deprecated, rename to VIBEMODE_{suffix}");
+                warn_deprecated_env_once(k, suffix);
             }
             return Some(val);
         }
     }
     None
+}
+
+fn warn_deprecated_env_once(key: &str, suffix: &str) {
+    if remember_deprecated_env_warning(key) {
+        eprintln!("warning: {key} is deprecated, rename to VIBEMODE_{suffix}");
+    }
+}
+
+fn remember_deprecated_env_warning(key: &str) -> bool {
+    let warnings = DEPRECATED_ENV_WARNINGS.get_or_init(|| Mutex::new(HashSet::new()));
+    warnings.lock().unwrap().insert(key.to_string())
 }
 
 pub fn find_dotenv_custom(explicit: Option<&PathBuf>) -> Option<PathBuf> {
@@ -610,5 +622,13 @@ mod tests {
             "https://r-api.vibemod.pro"
         );
         assert_eq!(parsed.get("ABTOP_BIN").unwrap(), "abtop");
+    }
+
+    #[test]
+    fn deprecated_env_warning_is_recorded_once_per_key() {
+        let key = format!("NEUROGATE_TEST_{}", std::process::id());
+
+        assert!(remember_deprecated_env_warning(&key));
+        assert!(!remember_deprecated_env_warning(&key));
     }
 }

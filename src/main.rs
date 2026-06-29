@@ -319,6 +319,19 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
 }
 
 fn load_config(args: &cli::args::Args) -> Result<ng::RuntimeConfig, String> {
+    if args.demo || args.mock.is_some() {
+        let dotenv = ng::load_dotenv_custom(args.env_file.as_ref())?;
+        return Ok(ng::RuntimeConfig {
+            api_base: args
+                .api_base
+                .clone()
+                .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
+            api_key: String::new(),
+            abtop_bin: ng::config_value("ABTOP_BIN", &dotenv)
+                .unwrap_or_else(|| ng::DEFAULT_ABTOP_BIN.to_string()),
+        });
+    }
+
     ng::RuntimeConfig::from_dotenv(
         args.api_base.clone(),
         &args.api_key_env,
