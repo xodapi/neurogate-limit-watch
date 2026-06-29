@@ -205,13 +205,15 @@ fn main() {
         start_refresh(
             weak.clone(),
             false,
-            http_clone.clone(),
-            acct.clone(),
-            router_clone.clone(),
             ng::DEFAULT_WARNING_THRESHOLD,
             ng::DEFAULT_DANGER_THRESHOLD,
-            gen1.clone(),
-            is_ref1.clone(),
+            RefreshContext {
+                http: http_clone.clone(),
+                account: acct.clone(),
+                router: router_clone.clone(),
+                generation: gen1.clone(),
+                is_refreshing: is_ref1.clone(),
+            },
         );
     });
 
@@ -225,13 +227,15 @@ fn main() {
         start_refresh(
             weak.clone(),
             true,
-            http_clone.clone(),
-            acct.clone(),
-            router_clone.clone(),
             ng::DEFAULT_WARNING_THRESHOLD,
             ng::DEFAULT_DANGER_THRESHOLD,
-            gen2.clone(),
-            is_ref2.clone(),
+            RefreshContext {
+                http: http_clone.clone(),
+                account: acct.clone(),
+                router: router_clone.clone(),
+                generation: gen2.clone(),
+                is_refreshing: is_ref2.clone(),
+            },
         );
     });
 
@@ -245,13 +249,15 @@ fn main() {
         start_refresh(
             weak.clone(),
             false,
-            http_clone.clone(),
-            acct.clone(),
-            router_clone.clone(),
             warning as f64,
             danger as f64,
-            gen3.clone(),
-            is_ref3.clone(),
+            RefreshContext {
+                http: http_clone.clone(),
+                account: acct.clone(),
+                router: router_clone.clone(),
+                generation: gen3.clone(),
+                is_refreshing: is_ref3.clone(),
+            },
         );
     });
 
@@ -266,26 +272,30 @@ fn main() {
         start_refresh(
             weak.clone(),
             false,
-            http_clone.clone(),
-            acct.clone(),
-            router_clone.clone(),
             ng::DEFAULT_WARNING_THRESHOLD,
             ng::DEFAULT_DANGER_THRESHOLD,
-            gen4.clone(),
-            is_ref4.clone(),
+            RefreshContext {
+                http: http_clone.clone(),
+                account: acct.clone(),
+                router: router_clone.clone(),
+                generation: gen4.clone(),
+                is_refreshing: is_ref4.clone(),
+            },
         );
     });
 
     start_refresh(
         app.as_weak(),
         false,
-        http,
-        current_acct.clone(),
-        router.clone(),
         ng::DEFAULT_WARNING_THRESHOLD,
         ng::DEFAULT_DANGER_THRESHOLD,
-        refresh_gen.clone(),
-        is_refreshing.clone(),
+        RefreshContext {
+            http,
+            account: current_acct.clone(),
+            router: router.clone(),
+            generation: refresh_gen.clone(),
+            is_refreshing: is_refreshing.clone(),
+        },
     );
 
     if let Ok(dotenv) = gui_load_dotenv() {
@@ -453,32 +463,31 @@ struct GuiDashboardResult {
     month_trend_data: Vec<f32>,
 }
 
-fn start_refresh(
-    app: Weak<AppWindow>,
-    demo: bool,
+#[derive(Clone)]
+struct RefreshContext {
     http: Arc<ng::HttpClient>,
     account: Arc<Mutex<Option<GuiAccount>>>,
     router: Arc<Mutex<ng::Router>>,
-    warning: f64,
-    danger: f64,
     generation: Arc<AtomicU64>,
     is_refreshing: Arc<std::sync::atomic::AtomicBool>,
-) {
-    if is_refreshing.swap(true, Ordering::SeqCst) {
+}
+
+fn start_refresh(app: Weak<AppWindow>, demo: bool, warning: f64, danger: f64, ctx: RefreshContext) {
+    if ctx.is_refreshing.swap(true, Ordering::SeqCst) {
         return;
     }
 
-    let my_gen = generation.fetch_add(1, Ordering::Relaxed) + 1;
+    let my_gen = ctx.generation.fetch_add(1, Ordering::Relaxed) + 1;
     thread::spawn(move || {
-        let result = load_dashboard(demo, &http, &account, warning, danger, &router);
-        if generation.load(Ordering::Relaxed) != my_gen {
-            is_refreshing.store(false, Ordering::SeqCst);
+        let result = load_dashboard(demo, &ctx.http, &ctx.account, warning, danger, &ctx.router);
+        if ctx.generation.load(Ordering::Relaxed) != my_gen {
+            ctx.is_refreshing.store(false, Ordering::SeqCst);
             return;
         }
         let _ = app.upgrade_in_event_loop(move |app| {
             apply_dashboard(&app, result);
         });
-        is_refreshing.store(false, Ordering::SeqCst);
+        ctx.is_refreshing.store(false, Ordering::SeqCst);
     });
 }
 fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) {
@@ -615,7 +624,7 @@ fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
     let reset: SharedString = window.reset.clone().into();
     let credits: SharedString = ng::metric_text("кредиты", window.credits.as_ref()).into();
     let requests: SharedString = ng::metric_text("запросы", window.requests.as_ref()).into();
-    let percent_text: SharedString = format!("{}", ng::format_percent(window.percent)).into();
+    let percent_text: SharedString = ng::format_percent(window.percent).into();
     let percent = window.percent as f32;
     let credit_percent =
         ng::peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
