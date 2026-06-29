@@ -1,9 +1,13 @@
 #![allow(clippy::collapsible_if)]
 
-use slint::{ComponentHandle, SharedString, Timer, TimerMode, Weak};
+use slint::{
+    ComponentHandle, PhysicalPosition, PhysicalSize, SharedString, Timer, TimerMode, Weak,
+};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -54,6 +58,96 @@ fn create_status_icon(color: (u8, u8, u8)) -> Icon {
     Icon::from_rgba(rgba, width as u32, height as u32).expect("failed to create tray icon")
 }
 
+fn spawn_mini_overlay(force_demo: bool) -> Result<(), String> {
+    let current =
+        std::env::current_exe().map_err(|error| format!("cannot find GUI exe: {error}"))?;
+    let mut command = Command::new(current);
+    command.arg("--overlay").arg("--compact");
+    if force_demo {
+        command.arg("--demo");
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("failed to launch mini overlay: {error}"))
+}
+
+fn config_dir_path() -> Result<PathBuf, String> {
+    let home = if cfg!(windows) {
+        std::env::var("APPDATA")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| std::env::var("USERPROFILE").ok().map(PathBuf::from))
+    } else {
+        std::env::var("HOME").ok().map(PathBuf::from)
+    };
+    let home =
+        home.ok_or_else(|| "Не удалось определить домашнюю папку пользователя".to_string())?;
+    Ok(if cfg!(windows) {
+        home.join("vimit")
+    } else {
+        home.join(".config").join("vimit")
+    })
+}
+
+fn ensure_config_dir() -> Result<PathBuf, String> {
+    let dir = config_dir_path()?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("cannot create config directory {}: {error}", dir.display()))?;
+    Ok(dir)
+}
+
+fn ensure_env_template() -> Result<PathBuf, String> {
+    let dir = ensure_config_dir()?;
+    let env_file = dir.join(".env");
+    if !env_file.exists() {
+        std::fs::write(
+            &env_file,
+            "# VibeMode настройки\n# Вставьте ключ без кавычек:\nVIBEMODE_API_KEY=\n# VIBEMODE_API_BASE=https://r-api.vibemod.pro\n",
+        )
+        .map_err(|error| format!("cannot write {}: {error}", env_file.display()))?;
+    }
+    Ok(env_file)
+}
+
+fn ensure_accounts_template() -> Result<PathBuf, String> {
+    let dir = ensure_config_dir()?;
+    let accounts_file = dir.join("accounts.toml");
+    if !accounts_file.exists() {
+        std::fs::write(
+            &accounts_file,
+            "# VibeMode accounts\n# [accounts.default]\n# api_key_env = \"VIBEMODE_API_KEY\"\n# api_base = \"https://r-api.vibemod.pro\"\n",
+        )
+        .map_err(|error| format!("cannot write {}: {error}", accounts_file.display()))?;
+    }
+    Ok(accounts_file)
+}
+
+fn open_path(path: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command.arg(path);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = Command::new("open");
+        command.arg(path);
+        command
+    };
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("cannot open {}: {error}", path.display()))
+}
+
 #[derive(Debug, Clone, Default)]
 struct GuiAccount {
     api_key_env: Option<String>,
@@ -81,6 +175,13 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let is_overlay = args.iter().any(|arg| arg == "--overlay");
     let is_compact = args.iter().any(|arg| arg == "--compact");
+    let force_demo = args.iter().any(|arg| arg == "--demo");
+    let mock_path = Arc::new(
+        args.iter()
+            .position(|arg| arg == "--mock")
+            .and_then(|idx| args.get(idx + 1))
+            .cloned(),
+    );
 
     ng::cli::update::start_background_check();
     let app = AppWindow::new().expect("cannot initialize Slint window");
@@ -95,11 +196,14 @@ fn main() {
     // Initialize System Tray
     let tray_menu = Menu::new();
     let show_item = MenuItem::new("Показать окно", true, None);
+    let mini_item = MenuItem::new("Мини-окно", true, None);
     let quit_item = MenuItem::new("Выход", true, None);
     tray_menu.append(&show_item).unwrap();
+    tray_menu.append(&mini_item).unwrap();
     tray_menu.append(&quit_item).unwrap();
 
     let show_id = show_item.id().clone();
+    let mini_id = mini_item.id().clone();
     let quit_id = quit_item.id().clone();
 
     let tray_icon_instance = TrayIconBuilder::new()
@@ -126,6 +230,54 @@ fn main() {
         let _ = slint::quit_event_loop();
     });
 
+    let drag_origin = Arc::new(Mutex::new(None::<PhysicalPosition>));
+    let resize_origin = Arc::new(Mutex::new(None::<PhysicalSize>));
+
+    let weak = app.as_weak();
+    let drag_origin_start = drag_origin.clone();
+    app.on_overlay_drag_start(move || {
+        if let Some(app) = weak.upgrade() {
+            *drag_origin_start.lock().unwrap() = Some(app.window().position());
+        }
+    });
+
+    let weak = app.as_weak();
+    let drag_origin_move = drag_origin.clone();
+    app.on_overlay_drag_move(move |dx, dy| {
+        if let Some(app) = weak.upgrade() {
+            if let Some(origin) = *drag_origin_move.lock().unwrap() {
+                let scale = app.window().scale_factor();
+                app.window().set_position(PhysicalPosition::new(
+                    origin.x + (dx * scale) as i32,
+                    origin.y + (dy * scale) as i32,
+                ));
+            }
+        }
+    });
+
+    let weak = app.as_weak();
+    let resize_origin_start = resize_origin.clone();
+    app.on_overlay_resize_start(move || {
+        if let Some(app) = weak.upgrade() {
+            *resize_origin_start.lock().unwrap() = Some(app.window().size());
+        }
+    });
+
+    let weak = app.as_weak();
+    let resize_origin_move = resize_origin.clone();
+    app.on_overlay_resize_move(move |dx, dy| {
+        if let Some(app) = weak.upgrade() {
+            if let Some(origin) = *resize_origin_move.lock().unwrap() {
+                let scale = app.window().scale_factor();
+                let min_width = if app.get_is_compact() { 220.0 } else { 300.0 };
+                let min_height = if app.get_is_compact() { 48.0 } else { 300.0 };
+                let width = (origin.width as f32 + dx * scale).max(min_width * scale) as u32;
+                let height = (origin.height as f32 + dy * scale).max(min_height * scale) as u32;
+                app.window().set_size(PhysicalSize::new(width, height));
+            }
+        }
+    });
+
     let countdown_timer = Timer::default();
     let weak = app.as_weak();
     countdown_timer.start(TimerMode::Repeated, Duration::from_secs(1), move || {
@@ -143,11 +295,17 @@ fn main() {
     let tray_timer = Timer::default();
     let weak = app.as_weak();
     let show_id_clone = show_id.clone();
+    let mini_id_clone = mini_id.clone();
     let quit_id_clone = quit_id.clone();
     tray_timer.start(TimerMode::Repeated, Duration::from_millis(100), move || {
         if let (Ok(event), Some(app)) = (MenuEvent::receiver().try_recv(), weak.upgrade()) {
             if event.id == show_id_clone {
                 let _ = app.show();
+            } else if event.id == mini_id_clone {
+                let demo = app.get_active_endpoint_label().as_str() == "demo";
+                if let Err(error) = spawn_mini_overlay(demo) {
+                    app.set_error_text(error.into());
+                }
             } else if event.id == quit_id_clone {
                 let _ = slint::quit_event_loop();
             }
@@ -177,8 +335,9 @@ fn main() {
     )));
 
     let refresh_gen = Arc::new(AtomicU64::new(0));
-    let is_refreshing = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let is_refreshing = Arc::new(AtomicBool::new(false));
     let overlay_history = Arc::new(Mutex::new(OverlayHistory::default()));
+    let demo_mode = Arc::new(AtomicBool::new(force_demo));
 
     let (account_names, account_configs) = load_gui_accounts();
     let current_acct = Arc::new(Mutex::new(None::<GuiAccount>));
@@ -216,10 +375,13 @@ fn main() {
     let gen1 = refresh_gen.clone();
     let is_ref1 = is_refreshing.clone();
     let history1 = overlay_history.clone();
+    let demo_mode1 = demo_mode.clone();
+    let mock_path1 = mock_path.clone();
     app.on_refresh_requested(move || {
         start_refresh(
             weak.clone(),
-            false,
+            demo_mode1.load(Ordering::Relaxed),
+            mock_path1.clone(),
             http_clone.clone(),
             acct.clone(),
             router_clone.clone(),
@@ -238,10 +400,14 @@ fn main() {
     let gen2 = refresh_gen.clone();
     let is_ref2 = is_refreshing.clone();
     let history2 = overlay_history.clone();
+    let demo_mode2 = demo_mode.clone();
+    let mock_path2 = mock_path.clone();
     app.on_demo_requested(move || {
+        demo_mode2.store(true, Ordering::Relaxed);
         start_refresh(
             weak.clone(),
             true,
+            mock_path2.clone(),
             http_clone.clone(),
             acct.clone(),
             router_clone.clone(),
@@ -260,10 +426,13 @@ fn main() {
     let gen3 = refresh_gen.clone();
     let is_ref3 = is_refreshing.clone();
     let history3 = overlay_history.clone();
+    let demo_mode3 = demo_mode.clone();
+    let mock_path3 = mock_path.clone();
     app.on_settings_changed(move |warning, danger| {
         start_refresh(
             weak.clone(),
-            false,
+            demo_mode3.load(Ordering::Relaxed),
+            mock_path3.clone(),
             http_clone.clone(),
             acct.clone(),
             router_clone.clone(),
@@ -283,10 +452,13 @@ fn main() {
     let gen4 = refresh_gen.clone();
     let is_ref4 = is_refreshing.clone();
     let history4 = overlay_history.clone();
+    let demo_mode4 = demo_mode.clone();
+    let mock_path4 = mock_path.clone();
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
         start_refresh(
             weak.clone(),
-            false,
+            demo_mode4.load(Ordering::Relaxed),
+            mock_path4.clone(),
             http_clone.clone(),
             acct.clone(),
             router_clone.clone(),
@@ -300,7 +472,8 @@ fn main() {
 
     start_refresh(
         app.as_weak(),
-        false,
+        demo_mode.load(Ordering::Relaxed),
+        mock_path.clone(),
         http,
         current_acct.clone(),
         router.clone(),
@@ -311,7 +484,10 @@ fn main() {
         overlay_history.clone(),
     );
 
-    if let Ok(dotenv) = gui_load_dotenv() {
+    if !force_demo
+        && mock_path.is_none()
+        && let Ok(dotenv) = gui_load_dotenv()
+    {
         let config = runtime_config(&dotenv, &current_acct);
         if config.api_key.is_empty() {
             app.set_needs_setup(true);
@@ -322,6 +498,17 @@ fn main() {
 
     app.on_auto_update_changed(|enabled| {
         ng::cli::update::set_auto_check_enabled(enabled);
+    });
+
+    let weak = app.as_weak();
+    app.on_launch_mini_overlay(move || {
+        if let Some(app) = weak.upgrade() {
+            let demo = app.get_active_endpoint_label().as_str() == "demo";
+            match spawn_mini_overlay(demo) {
+                Ok(()) => app.set_status_text("Мини-окно запущено".into()),
+                Err(error) => app.set_error_text(error.into()),
+            }
+        }
     });
 
     let weak = app.as_weak();
@@ -394,72 +581,68 @@ fn main() {
         });
     });
 
+    let weak = app.as_weak();
     app.on_open_config_dir(move || {
-        let home = if cfg!(windows) {
-            std::env::var("APPDATA")
-                .ok()
-                .map(std::path::PathBuf::from)
-                .or_else(|| {
-                    std::env::var("USERPROFILE")
-                        .ok()
-                        .map(std::path::PathBuf::from)
-                })
-        } else {
-            std::env::var("HOME").ok().map(std::path::PathBuf::from)
-        };
-        if let Some(home) = home {
-            let config_dir = if cfg!(windows) {
-                home.join("vimit")
-            } else {
-                home.join(".config").join("vimit")
-            };
-            let _ = std::fs::create_dir_all(&config_dir);
-            #[cfg(windows)]
-            let _ = std::process::Command::new("explorer")
-                .arg(&config_dir)
-                .spawn();
-            #[cfg(target_os = "macos")]
-            let _ = std::process::Command::new("open").arg(&config_dir).spawn();
-            #[cfg(target_os = "linux")]
-            let _ = std::process::Command::new("xdg-open")
-                .arg(&config_dir)
-                .spawn();
+        if let Some(app) = weak.upgrade() {
+            match ensure_config_dir().and_then(|path| open_path(&path).map(|()| path)) {
+                Ok(path) => {
+                    app.set_setup_status_text(
+                        format!("Папка настроек открыта: {}", path.display()).into(),
+                    );
+                    app.set_footer_text(format!("config: {}", path.display()).into());
+                }
+                Err(error) => app.set_setup_status_text(error.into()),
+            }
         }
     });
 
+    let weak = app.as_weak();
+    app.on_setup_create_config(move || {
+        if let Some(app) = weak.upgrade() {
+            match ensure_env_template() {
+                Ok(path) => {
+                    app.set_setup_status_text(
+                        format!(
+                            "Создан файл настроек: {}. Откройте его и вставьте VIBEMODE_API_KEY.",
+                            path.display()
+                        )
+                        .into(),
+                    );
+                    app.set_footer_text(format!("config: {}", path.display()).into());
+                }
+                Err(error) => app.set_setup_status_text(error.into()),
+            }
+        }
+    });
+
+    let weak = app.as_weak();
+    app.on_setup_open_env_file(move || {
+        if let Some(app) = weak.upgrade() {
+            match ensure_env_template().and_then(|path| open_path(&path).map(|()| path)) {
+                Ok(path) => {
+                    app.set_setup_status_text(
+                        format!(
+                            "Откройте {}, вставьте ключ и нажмите Проверить.",
+                            path.display()
+                        )
+                        .into(),
+                    );
+                }
+                Err(error) => app.set_setup_status_text(error.into()),
+            }
+        }
+    });
+
+    let weak = app.as_weak();
     app.on_open_accounts_config(move || {
-        let home = if cfg!(windows) {
-            std::env::var("APPDATA")
-                .ok()
-                .map(std::path::PathBuf::from)
-                .or_else(|| {
-                    std::env::var("USERPROFILE")
-                        .ok()
-                        .map(std::path::PathBuf::from)
-                })
-        } else {
-            std::env::var("HOME").ok().map(std::path::PathBuf::from)
-        };
-        if let Some(home) = home {
-            let config_dir = if cfg!(windows) {
-                home.join("vimit")
-            } else {
-                home.join(".config").join("vimit")
-            };
-            let accounts_toml = config_dir.join("accounts.toml");
-            if accounts_toml.exists() {
-                #[cfg(windows)]
-                let _ = std::process::Command::new("explorer")
-                    .arg(&accounts_toml)
-                    .spawn();
-                #[cfg(target_os = "macos")]
-                let _ = std::process::Command::new("open")
-                    .arg(&accounts_toml)
-                    .spawn();
-                #[cfg(target_os = "linux")]
-                let _ = std::process::Command::new("xdg-open")
-                    .arg(&accounts_toml)
-                    .spawn();
+        if let Some(app) = weak.upgrade() {
+            match ensure_accounts_template().and_then(|path| open_path(&path).map(|()| path)) {
+                Ok(path) => {
+                    app.set_status_text(
+                        format!("Открыт accounts config: {}", path.display()).into(),
+                    );
+                }
+                Err(error) => app.set_error_text(error.into()),
             }
         }
     });
@@ -499,6 +682,7 @@ struct OverlayState {
 fn start_refresh(
     app: Weak<AppWindow>,
     demo: bool,
+    mock_path: Arc<Option<String>>,
     http: Arc<ng::HttpClient>,
     account: Arc<Mutex<Option<GuiAccount>>>,
     router: Arc<Mutex<ng::Router>>,
@@ -516,6 +700,7 @@ fn start_refresh(
     thread::spawn(move || {
         let result = load_dashboard(
             demo,
+            mock_path.as_deref(),
             &http,
             &account,
             warning,
@@ -535,48 +720,10 @@ fn start_refresh(
 }
 fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) {
     if let Ok(res) = result.as_ref() {
-        let max_percent = res
-            .dashboard
-            .windows
-            .iter()
-            .map(|w| w.percent)
-            .fold(0.0f64, f64::max);
-
-        let color = if max_percent >= 90.0 {
-            (214, 111, 115) // red
-        } else if max_percent >= 75.0 {
-            (202, 164, 95) // yellow
-        } else if max_percent > 0.0 {
-            (120, 173, 132) // green
-        } else {
-            (141, 150, 170) // grey
-        };
-
-        let mut tooltip_parts = Vec::new();
-        for w in &res.dashboard.windows {
-            let level_emoji = match w.level.as_str() {
-                "danger" => "🚨",
-                "warning" => "⚠️",
-                "ok" => "✅",
-                _ => "⚪",
-            };
-            tooltip_parts.push(format!(
-                "{}: {} {} ({:.1}%)",
-                w.key, level_emoji, w.level, w.percent
-            ));
-        }
-        let tooltip_text = if tooltip_parts.is_empty() {
-            "VibeMode Control".to_string()
-        } else {
-            format!("VibeMode Control\n{}", tooltip_parts.join("\n"))
-        };
-
-        TRAY_ICON.with(|cell| {
-            if let Some(ref mut tray) = *cell.borrow_mut() {
-                let _ = tray.set_icon(Some(create_status_icon(color)));
-                let _ = tray.set_tooltip(Some(tooltip_text));
-            }
-        });
+        update_tray_status(tray_status_from_dashboard(
+            &res.dashboard.source,
+            &res.dashboard.windows,
+        ));
     }
 
     let offline_min = ng::get_offline_duration_min()
@@ -657,8 +804,59 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
             };
             app.set_status_text(msg.into());
             app.set_error_text(msg.into());
+            update_tray_status(TrayStatus {
+                color: (214, 111, 115),
+                tooltip: format!("VibeMode Control\nошибка: {msg}"),
+            });
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct TrayStatus {
+    color: (u8, u8, u8),
+    tooltip: String,
+}
+
+fn tray_status_from_dashboard(source: &str, windows: &[ng::WindowState]) -> TrayStatus {
+    let max_percent = windows.iter().map(|w| w.percent).fold(0.0f64, f64::max);
+    let color = if max_percent >= 90.0 {
+        (214, 111, 115)
+    } else if max_percent >= 75.0 {
+        (202, 164, 95)
+    } else if max_percent > 0.0 {
+        (120, 173, 132)
+    } else {
+        (141, 150, 170)
+    };
+
+    let mut tooltip_parts = Vec::new();
+    let source = source.trim_start_matches("источник: ").trim();
+    if !source.is_empty() {
+        tooltip_parts.push(source.to_string());
+    }
+    for window in windows {
+        tooltip_parts.push(format!(
+            "{}: {} ({:.1}%)",
+            window.key, window.level, window.percent
+        ));
+    }
+    let tooltip = if tooltip_parts.is_empty() {
+        "VibeMode Control".to_string()
+    } else {
+        format!("VibeMode Control\n{}", tooltip_parts.join("\n"))
+    };
+
+    TrayStatus { color, tooltip }
+}
+
+fn update_tray_status(status: TrayStatus) {
+    TRAY_ICON.with(|cell| {
+        if let Some(ref mut tray) = *cell.borrow_mut() {
+            let _ = tray.set_icon(Some(create_status_icon(status.color)));
+            let _ = tray.set_tooltip(Some(status.tooltip));
+        }
+    });
 }
 
 fn apply_window(app: &AppWindow, key: &str, window: Option<&ng::WindowState>) {
@@ -750,8 +948,10 @@ fn gui_load_dotenv() -> Result<HashMap<String, String>, String> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn load_dashboard(
     force_demo: bool,
+    mock_path: Option<&str>,
     http: &ng::HttpClient,
     account: &Arc<Mutex<Option<GuiAccount>>>,
     warning: f64,
@@ -759,39 +959,50 @@ fn load_dashboard(
     router: &Arc<Mutex<ng::Router>>,
     overlay_history: &Arc<Mutex<OverlayHistory>>,
 ) -> Result<GuiDashboardResult, String> {
-    let dotenv = gui_load_dotenv()?;
-    let config = runtime_config(&dotenv, account);
-    let ((payload, source), active_endpoint_label) = if force_demo {
+    let (payload, source, active_endpoint_label, abtop_bin, live_api_key_present) = if force_demo {
         (
-            (
-                ng::demo_payload(),
-                "источник: встроенные демо-данные".to_string(),
-            ),
+            ng::demo_payload(),
+            "источник: встроенные демо-данные".to_string(),
             "demo".to_string(),
+            ng::DEFAULT_ABTOP_BIN.to_string(),
+            false,
         )
-    } else if config.api_key.is_empty() {
+    } else if let Some(path) = mock_path {
         (
+            ng::load_mock(path)?,
+            format!("источник: mock {}", path),
+            "mock".to_string(),
+            ng::DEFAULT_ABTOP_BIN.to_string(),
+            false,
+        )
+    } else {
+        let dotenv = gui_load_dotenv()?;
+        let config = runtime_config(&dotenv, account);
+        if config.api_key.is_empty() {
             (
                 ng::demo_payload(),
                 "источник: демо; добавьте VIBEMODE_API_KEY в .env для live-лимитов".to_string(),
-            ),
-            "demo".to_string(),
-        )
-    } else {
-        let mut r = router.lock().unwrap();
-        let (val, label) = http.fetch_me_with_retry(&config.api_key, &mut r, &config.api_base)?;
-        (
+                "demo".to_string(),
+                config.abtop_bin,
+                false,
+            )
+        } else {
+            let mut r = router.lock().unwrap();
+            let (val, label) =
+                http.fetch_me_with_retry(&config.api_key, &mut r, &config.api_base)?;
             (
                 val,
                 format!("источник: live VibeMode /v1/me на {}", r.active_endpoint()),
-            ),
-            label,
-        )
+                label,
+                config.abtop_bin,
+                true,
+            )
+        }
     };
 
     let windows = ng::summarize_me(&payload, warning, danger);
     let status = ng::dashboard_status(&windows);
-    let agent = ng::read_agent_status(&config.abtop_bin);
+    let agent = ng::read_agent_status(&abtop_bin);
     let overlay = build_overlay_state(&windows, &agent.token_rate, overlay_history);
 
     // Save snapshot to TrendStore and load trend data
@@ -801,7 +1012,7 @@ fn load_dashboard(
     let mut month_trend_data = Vec::new();
 
     if let Ok(Some(store)) = ng::cli::trends::TrendStore::open() {
-        if !force_demo && !config.api_key.is_empty() {
+        if live_api_key_present {
             let _ = store.save_snapshot(&windows, chrono::Utc::now());
         }
         if let Ok(days) = store.query_trends(15) {
@@ -1008,5 +1219,65 @@ fn runtime_config(
         api_key: ng::config_value(api_key_env, dotenv).unwrap_or_default(),
         abtop_bin: ng::config_value("ABTOP_BIN", dotenv)
             .unwrap_or_else(|| ng::DEFAULT_ABTOP_BIN.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_window(key: &'static str, level: &str, percent: f64) -> ng::WindowState {
+        ng::WindowState {
+            key,
+            level: level.to_string(),
+            reset: "через 1ч".to_string(),
+            reset_in_seconds: Some(3600),
+            credits: Some(ng::Metric {
+                used: percent,
+                limit: 100.0,
+                remaining: 100.0 - percent,
+                percent,
+            }),
+            requests: None,
+            percent,
+        }
+    }
+
+    #[test]
+    fn tray_status_uses_current_dashboard_windows() {
+        let status = tray_status_from_dashboard(
+            "источник: live VibeMode /v1/me на api",
+            &[
+                test_window("5h", "warning", 78.0),
+                test_window("7d", "ok", 42.0),
+            ],
+        );
+
+        assert_eq!(status.color, (202, 164, 95));
+        assert!(status.tooltip.contains("live VibeMode /v1/me на api"));
+        assert!(status.tooltip.contains("5h: warning (78.0%)"));
+        assert!(status.tooltip.contains("7d: ok (42.0%)"));
+    }
+
+    #[test]
+    fn overlay_helpers_format_rates_and_countdown() {
+        assert_eq!(parse_rate_value("12,5 токены/мин"), Some(12.5));
+        assert_eq!(one_decimal_local(3.25), "3,2");
+        assert_eq!(format_overlay_countdown(-1), "unknown");
+        assert_eq!(format_overlay_countdown(125), "через 2м");
+    }
+
+    #[test]
+    fn overlay_state_uses_rolling_samples() {
+        let history = Arc::new(Mutex::new(OverlayHistory::default()));
+        let windows = vec![test_window("5h", "warning", 78.0)];
+
+        let state = build_overlay_state(&windows, "10,0 токены/мин", &history);
+
+        assert_eq!(state.credit_rate_text, "0,0 кред/мин");
+        assert_eq!(state.token_rate_text, "10,0 токены/мин");
+        assert_eq!(state.reset_label, "сброс 5h окна");
+        assert_eq!(state.reset_seconds, 3600);
+        assert_eq!(state.spark_data.len(), 1);
     }
 }
