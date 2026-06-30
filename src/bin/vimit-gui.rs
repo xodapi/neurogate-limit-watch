@@ -1,3 +1,4 @@
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 #![allow(clippy::collapsible_if)]
 
 use slint::{
@@ -23,6 +24,10 @@ slint::include_modules!();
 thread_local! {
     static TRAY_ICON: RefCell<Option<TrayIcon>> = const { RefCell::new(None) };
 }
+
+const OVERLAY_RATE_WINDOW: Duration = Duration::from_secs(5 * 60);
+const OVERLAY_HISTORY_RETENTION: Duration = Duration::from_secs(30 * 60);
+const OVERLAY_SPARK_SAMPLES: usize = 15;
 
 fn create_status_icon(color: (u8, u8, u8)) -> Icon {
     let width = 32;
@@ -664,9 +669,57 @@ struct GuiDashboardResult {
 
 #[derive(Default)]
 struct OverlayHistory {
-    last_used: Option<f64>,
-    last_at: Option<Instant>,
+    observations: VecDeque<OverlayUsagePoint>,
     samples: VecDeque<f32>,
+}
+
+struct OverlayUsagePoint {
+    at: Instant,
+    used: f64,
+}
+
+impl OverlayHistory {
+    fn record_usage(&mut self, at: Instant, used: f64) -> f32 {
+        self.observations.push_back(OverlayUsagePoint { at, used });
+        self.trim_observations(at);
+
+        let rate = self.average_credit_rate(at);
+        if self.samples.len() == OVERLAY_SPARK_SAMPLES {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(rate);
+        rate
+    }
+
+    fn average_credit_rate(&self, now: Instant) -> f32 {
+        let Some(latest) = self.observations.back() else {
+            return 0.0;
+        };
+
+        let baseline = self
+            .observations
+            .iter()
+            .find(|point| within_duration(now, point.at, OVERLAY_RATE_WINDOW))
+            .unwrap_or(latest);
+
+        let elapsed_min = OVERLAY_RATE_WINDOW.as_secs_f64() / 60.0;
+        ((latest.used - baseline.used).max(0.0) / elapsed_min) as f32
+    }
+
+    fn trim_observations(&mut self, now: Instant) {
+        while self
+            .observations
+            .front()
+            .is_some_and(|point| !within_duration(now, point.at, OVERLAY_HISTORY_RETENTION))
+        {
+            self.observations.pop_front();
+        }
+    }
+}
+
+fn within_duration(now: Instant, earlier: Instant, duration: Duration) -> bool {
+    now.checked_duration_since(earlier)
+        .is_some_and(|elapsed| elapsed <= duration)
 }
 
 struct OverlayState {
@@ -1085,25 +1138,9 @@ fn build_overlay_state(
         .unwrap_or(0.0);
 
     let mut history = history.lock().unwrap();
-    let mut credit_rate = 0.0f32;
-    if let (Some(used), Some(last_used), Some(last_at)) =
-        (current_used, history.last_used, history.last_at)
-    {
-        let elapsed_min = now.duration_since(last_at).as_secs_f64() / 60.0;
-        if elapsed_min > 0.0 {
-            credit_rate = ((used - last_used).max(0.0) / elapsed_min) as f32;
-        }
-    }
-
-    if let Some(used) = current_used {
-        history.last_used = Some(used);
-        history.last_at = Some(now);
-    }
-
-    if history.samples.len() == 15 {
-        history.samples.pop_front();
-    }
-    history.samples.push_back(credit_rate.max(0.0));
+    let credit_rate = current_used
+        .map(|used| history.record_usage(now, used))
+        .unwrap_or_default();
 
     let samples: Vec<f32> = history.samples.iter().copied().collect();
     let spark_data = scale_samples(&samples);
@@ -1281,5 +1318,34 @@ mod tests {
         assert_eq!(state.reset_label, "сброс 5h окна");
         assert_eq!(state.reset_seconds, 3600);
         assert_eq!(state.spark_data.len(), 1);
+    }
+
+    #[test]
+    fn overlay_rate_is_averaged_over_five_minutes() {
+        let mut history = OverlayHistory::default();
+        let now = Instant::now();
+
+        assert_eq!(history.record_usage(now, 0.0), 0.0);
+        assert_eq!(
+            history.record_usage(now + Duration::from_secs(10), 1_000.0),
+            200.0
+        );
+        assert_eq!(
+            history.record_usage(now + Duration::from_secs(5 * 60), 1_500.0),
+            300.0
+        );
+    }
+
+    #[test]
+    fn overlay_rate_discards_old_observations() {
+        let mut history = OverlayHistory::default();
+        let now = Instant::now();
+        let later = now + OVERLAY_HISTORY_RETENTION + Duration::from_secs(1);
+
+        history.record_usage(now, 100.0);
+        history.record_usage(later, 600.0);
+
+        assert_eq!(history.observations.len(), 1);
+        assert_eq!(history.average_credit_rate(later), 0.0);
     }
 }
