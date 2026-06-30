@@ -33,6 +33,8 @@ const OVERLAY_HISTORY_RETENTION: Duration = Duration::from_secs(30 * 60);
 const OVERLAY_SPARK_SAMPLES: usize = 15;
 const OVERLAY_COMPACT_SIZE: (f32, f32) = (260.0, 52.0);
 const OVERLAY_FULL_SIZE: (f32, f32) = (340.0, 380.0);
+const CREATURE_MIN_POINTS: usize = 8;
+const CREATURE_MAX_POINTS: usize = 128;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -58,6 +60,49 @@ fn set_overlay_window_size(app: &AppWindow, compact: bool) {
         (width * scale).round() as u32,
         (height * scale).round() as u32,
     ));
+}
+
+fn creature_node_count(percent: f32) -> usize {
+    let normalized = (percent.clamp(0.0, 100.0) / 100.0) as f64;
+    (CREATURE_MIN_POINTS + (normalized * 120.0).floor() as usize)
+        .clamp(CREATURE_MIN_POINTS, CREATURE_MAX_POINTS)
+}
+
+fn creature_path_commands(percent: f32, phase: f32) -> String {
+    let count = creature_node_count(percent);
+    let center_x = 52.0f32;
+    let center_y = 44.0f32;
+    let base_radius = 26.0 + percent.clamp(0.0, 100.0) * 0.10;
+    let mut points = Vec::with_capacity(count);
+
+    for idx in 0..count {
+        let angle = (idx as f32 / count as f32) * std::f32::consts::TAU;
+        let jitter = (phase.to_radians() * 1.7 + idx as f32 * 1.618).sin() * 3.4
+            + (phase.to_radians() * 0.7 + idx as f32 * 2.413).cos() * 1.8;
+        let radius = (base_radius + jitter).clamp(22.0, 39.0);
+        points.push((
+            center_x + radius * angle.cos(),
+            center_y + radius * angle.sin(),
+        ));
+    }
+
+    let mut commands = String::with_capacity(count * 34);
+    let (start_x, start_y) = points[0];
+    commands.push_str(&format!("M {:.2} {:.2} ", start_x, start_y));
+    for idx in 0..count {
+        let p0 = points[(idx + count - 1) % count];
+        let p1 = points[idx];
+        let p2 = points[(idx + 1) % count];
+        let p3 = points[(idx + 2) % count];
+        let c1 = (p1.0 + (p2.0 - p0.0) / 6.0, p1.1 + (p2.1 - p0.1) / 6.0);
+        let c2 = (p2.0 - (p3.0 - p1.0) / 6.0, p2.1 - (p3.1 - p1.1) / 6.0);
+        commands.push_str(&format!(
+            "C {:.2} {:.2} {:.2} {:.2} {:.2} {:.2} ",
+            c1.0, c1.1, c2.0, c2.1, p2.0, p2.1
+        ));
+    }
+    commands.push('Z');
+    commands
 }
 
 fn create_status_icon(color: (u8, u8, u8)) -> Icon {
@@ -410,6 +455,9 @@ fn main() {
         if let Some(app) = weak.upgrade() {
             let next = (app.get_overlay_pulse_phase() + 7.0) % 360.0;
             app.set_overlay_pulse_phase(next);
+            let percent = app.get_overlay_creature_percent();
+            app.set_overlay_creature_points(creature_node_count(percent) as i32);
+            app.set_overlay_creature_path(creature_path_commands(percent, next).into());
         }
     });
 
@@ -857,6 +905,9 @@ struct OverlayState {
     token_rate_text: String,
     percent_hour_text: String,
     spark_data: Vec<f32>,
+    creature_percent: f32,
+    creature_points: i32,
+    creature_path: String,
     delta_text: String,
     delta_level: String,
     reset_label: String,
@@ -939,6 +990,9 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
             app.set_overlay_reset_label(res.overlay.reset_label.into());
             app.set_overlay_reset_seconds(res.overlay.reset_seconds);
             app.set_overlay_reset_text(format_overlay_countdown(res.overlay.reset_seconds).into());
+            app.set_overlay_creature_percent(res.overlay.creature_percent);
+            app.set_overlay_creature_points(res.overlay.creature_points);
+            app.set_overlay_creature_path(res.overlay.creature_path.into());
 
             if let Some(latest) = ng::cli::update::latest_checked_version() {
                 app.set_new_version_label(latest.into());
@@ -1275,6 +1329,9 @@ fn build_overlay_state(
     let samples: Vec<f32> = history.samples.iter().copied().collect();
     let spark_data = scale_samples(&samples);
     let token_rate = parse_rate_value(token_rate_text).unwrap_or(credit_rate * 750.0);
+    let creature_percent = five.map(|window| window.percent as f32).unwrap_or(0.0);
+    let creature_points = creature_node_count(creature_percent) as i32;
+    let creature_path = creature_path_commands(creature_percent, 0.0);
     let percent_hour = if credit_limit > 0.0 {
         (credit_rate as f64 / credit_limit * 60.0 * 100.0) as f32
     } else {
@@ -1288,6 +1345,9 @@ fn build_overlay_state(
         token_rate_text: format!("{} токены/мин", one_decimal_local(token_rate)),
         percent_hour_text: format!("{}%/час", one_decimal_local(percent_hour)),
         spark_data,
+        creature_percent,
+        creature_points,
+        creature_path,
         delta_text,
         delta_level,
         reset_label,
@@ -1439,6 +1499,23 @@ mod tests {
     fn overlay_size_switches_between_full_and_compact() {
         assert_eq!(overlay_logical_size(false), (340.0, 380.0));
         assert_eq!(overlay_logical_size(true), (260.0, 52.0));
+    }
+
+    #[test]
+    fn creature_points_scale_with_percent() {
+        assert_eq!(creature_node_count(0.0), 8);
+        assert_eq!(creature_node_count(78.0), 101);
+        assert_eq!(creature_node_count(100.0), 128);
+        assert_eq!(creature_node_count(250.0), 128);
+    }
+
+    #[test]
+    fn creature_path_uses_dynamic_cubic_segments() {
+        let path = creature_path_commands(78.0, 42.0);
+
+        assert!(path.starts_with("M "));
+        assert_eq!(path.matches("C ").count(), 101);
+        assert!(path.ends_with('Z'));
     }
 
     #[test]

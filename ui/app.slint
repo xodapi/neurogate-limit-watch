@@ -278,8 +278,11 @@ component DonutChart inherits Rectangle {
 component PulseOrganism inherits Rectangle {
     in property <string> level;
     in property <float> phase;
+    in property <string> commands;
+    in property <int> node-count;
 
     private property <brush> accent: root.level == "danger" ? #f85149 : root.level == "warning" ? #d29922 : #3fb950;
+    private property <bool> has-dynamic-shape: root.commands != "";
     private property <float> r0: 34 + 4 * sin(root.phase * 1deg);
     private property <float> r1: 32 + 5 * sin((root.phase + 48) * 1deg);
     private property <float> r2: 35 + 3 * sin((root.phase + 116) * 1deg);
@@ -299,6 +302,7 @@ component PulseOrganism inherits Rectangle {
         fill: root.accent;
         stroke: transparent;
         opacity: 0.12;
+        visible: !root.has-dynamic-shape;
         MoveTo { x: 52 + root.r0; y: 44; }
         LineTo { x: 52 + root.r1 * 0.5; y: 44 + root.r1 * 0.866; }
         LineTo { x: 52 - root.r2 * 0.5; y: 44 + root.r2 * 0.866; }
@@ -317,6 +321,7 @@ component PulseOrganism inherits Rectangle {
         stroke: root.accent;
         stroke-width: 2.2px;
         opacity: 0.86;
+        visible: !root.has-dynamic-shape;
         MoveTo { x: 52 + root.r0; y: 44; }
         LineTo { x: 52 + root.r1 * 0.5; y: 44 + root.r1 * 0.866; }
         LineTo { x: 52 - root.r2 * 0.5; y: 44 + root.r2 * 0.866; }
@@ -341,6 +346,32 @@ component PulseOrganism inherits Rectangle {
         border-radius: self.width / 2;
         background: root.accent;
         opacity: 0.92;
+        visible: !root.has-dynamic-shape;
+    }
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 104;
+        viewbox-height: 88;
+        fill: root.accent;
+        stroke: transparent;
+        opacity: 0.13;
+        visible: root.has-dynamic-shape;
+        commands: root.commands;
+    }
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 104;
+        viewbox-height: 88;
+        fill: transparent;
+        stroke: root.accent;
+        stroke-width: root.node-count > 64 ? 1.5px : 2.1px;
+        opacity: 0.88;
+        visible: root.has-dynamic-shape;
+        commands: root.commands;
     }
 
     Rectangle {
@@ -409,6 +440,9 @@ export component AppWindow inherits Window {
     in property <string> overlay-delta-level: "ok";
     in property <string> overlay-reset-label: "сброс окна";
     in property <string> overlay-reset-text: "unknown";
+    in property <string> overlay-creature-path: "";
+    in property <int> overlay-creature-points: 8;
+    in property <float> overlay-creature-percent: 0;
     in-out property <float> overlay-pulse-phase: 0;
     in-out property <bool> stealth-mode: false;
     in property <string> active-endpoint-label: "";
@@ -1241,13 +1275,15 @@ export component AppWindow inherits Window {
             
             VerticalLayout {
                 spacing: 4px;
-                Text { text: "живой расход за 5 минут"; font-size: 11px; color: #7d8590; }
+                Text { text: "живой расход · \{root.overlay-creature-points} точек"; font-size: 11px; color: #7d8590; }
                 HorizontalLayout {
                     height: 88px;
                     alignment: center;
                     PulseOrganism {
                         level: root.overlay-delta-level;
                         phase: root.overlay-pulse-phase;
+                        commands: root.overlay-creature-path;
+                        node-count: root.overlay-creature-points;
                     }
                 }
             }
