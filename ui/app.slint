@@ -529,7 +529,8 @@ export component AppWindow inherits Window {
                             }
 
                             Button {
-                                text: "Мини-окно";
+                                text: "Запустить мини-окно";
+                                width: 168px;
                                 clicked => { root.launch-mini-overlay(); }
                             }
 
@@ -1021,7 +1022,8 @@ export component AppWindow inherits Window {
                 }
 
                 Button {
-                    text: "Мини-демо";
+                    text: "Запустить мини-окно (демо)";
+                    width: 220px;
                     clicked => {
                         root.needs-setup = false;
                         root.demo-requested();

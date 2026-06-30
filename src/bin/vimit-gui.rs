@@ -505,7 +505,9 @@ fn main() {
         if let Some(app) = weak.upgrade() {
             let demo = app.get_active_endpoint_label().as_str() == "demo";
             match spawn_mini_overlay(demo) {
-                Ok(()) => app.set_status_text("Мини-окно запущено".into()),
+                Ok(()) => {
+                    app.set_status_text("Мини-окно запущено, его можно перетащить мышью".into())
+                }
                 Err(error) => app.set_error_text(error.into()),
             }
         }
