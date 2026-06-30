@@ -275,6 +275,85 @@ component DonutChart inherits Rectangle {
     }
 }
 
+component PulseOrganism inherits Rectangle {
+    in property <string> level;
+    in property <float> phase;
+
+    private property <brush> accent: root.level == "danger" ? #f85149 : root.level == "warning" ? #d29922 : #3fb950;
+    private property <float> r0: 34 + 4 * sin(root.phase * 1deg);
+    private property <float> r1: 32 + 5 * sin((root.phase + 48) * 1deg);
+    private property <float> r2: 35 + 3 * sin((root.phase + 116) * 1deg);
+    private property <float> r3: 31 + 6 * sin((root.phase + 180) * 1deg);
+    private property <float> r4: 36 + 4 * sin((root.phase + 238) * 1deg);
+    private property <float> r5: 33 + 5 * sin((root.phase + 304) * 1deg);
+
+    width: 104px;
+    height: 88px;
+    background: transparent;
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 104;
+        viewbox-height: 88;
+        fill: root.accent;
+        stroke: transparent;
+        opacity: 0.12;
+        MoveTo { x: 52 + root.r0; y: 44; }
+        LineTo { x: 52 + root.r1 * 0.5; y: 44 + root.r1 * 0.866; }
+        LineTo { x: 52 - root.r2 * 0.5; y: 44 + root.r2 * 0.866; }
+        LineTo { x: 52 - root.r3; y: 44; }
+        LineTo { x: 52 - root.r4 * 0.5; y: 44 - root.r4 * 0.866; }
+        LineTo { x: 52 + root.r5 * 0.5; y: 44 - root.r5 * 0.866; }
+        Close {}
+    }
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 104;
+        viewbox-height: 88;
+        fill: transparent;
+        stroke: root.accent;
+        stroke-width: 2.2px;
+        opacity: 0.86;
+        MoveTo { x: 52 + root.r0; y: 44; }
+        LineTo { x: 52 + root.r1 * 0.5; y: 44 + root.r1 * 0.866; }
+        LineTo { x: 52 - root.r2 * 0.5; y: 44 + root.r2 * 0.866; }
+        LineTo { x: 52 - root.r3; y: 44; }
+        LineTo { x: 52 - root.r4 * 0.5; y: 44 - root.r4 * 0.866; }
+        LineTo { x: 52 + root.r5 * 0.5; y: 44 - root.r5 * 0.866; }
+        Close {}
+    }
+
+    for node[index] in [
+        { x: 52 + root.r0, y: 44 },
+        { x: 52 + root.r1 * 0.5, y: 44 + root.r1 * 0.866 },
+        { x: 52 - root.r2 * 0.5, y: 44 + root.r2 * 0.866 },
+        { x: 52 - root.r3, y: 44 },
+        { x: 52 - root.r4 * 0.5, y: 44 - root.r4 * 0.866 },
+        { x: 52 + root.r5 * 0.5, y: 44 - root.r5 * 0.866 },
+    ] : Rectangle {
+        width: 8px + 2px * sin((root.phase + index * 60) * 1deg);
+        height: self.width;
+        x: node.x * 1px - self.width / 2;
+        y: node.y * 1px - self.height / 2;
+        border-radius: self.width / 2;
+        background: root.accent;
+        opacity: 0.92;
+    }
+
+    Rectangle {
+        width: 18px;
+        height: 18px;
+        x: 43px;
+        y: 35px;
+        border-radius: 9px;
+        background: root.accent;
+        opacity: 0.18 + 0.10 * sin(root.phase * 1deg);
+    }
+}
+
 export component AppWindow inherits Window {
     title: "vimit-gui";
     in-out property <bool> is-overlay: false;
@@ -285,9 +364,9 @@ export component AppWindow inherits Window {
     in property <float> token-rate-raw: 0.0;
 
     preferred-width: root.is-overlay ? (root.is-compact ? 260px : 340px) : 1120px;
-    preferred-height: root.is-overlay ? (root.is-compact ? 52px : 320px) : 720px;
+    preferred-height: root.is-overlay ? (root.is-compact ? 52px : 380px) : 720px;
     min-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : 900px;
-    min-height: root.is-overlay ? (root.is-compact ? 48px : 300px) : 660px;
+    min-height: root.is-overlay ? (root.is-compact ? 48px : 340px) : 660px;
     no-frame: root.is-overlay;
     always-on-top: root.is-overlay && root.overlay-pinned;
     background: root.is-overlay ? transparent : Theme.bg-primary;
@@ -302,6 +381,7 @@ export component AppWindow inherits Window {
     callback auto-update-changed(bool);
     callback close-overlay();
     callback launch-mini-overlay();
+    callback overlay-compact-changed(bool);
     callback overlay-drag-start();
     callback overlay-drag-move(float, float);
     callback overlay-resize-start();
@@ -329,6 +409,7 @@ export component AppWindow inherits Window {
     in property <string> overlay-delta-level: "ok";
     in property <string> overlay-reset-label: "сброс окна";
     in property <string> overlay-reset-text: "unknown";
+    in-out property <float> overlay-pulse-phase: 0;
     in-out property <bool> stealth-mode: false;
     in property <string> active-endpoint-label: "";
     in property <int> api-offline-min: -1;
@@ -1082,7 +1163,10 @@ export component AppWindow inherits Window {
                         text: "-";
                         width: 28px;
                         height: 24px;
-                        clicked => { root.is-compact = true; }
+                        clicked => {
+                            root.is-compact = true;
+                            root.overlay-compact-changed(true);
+                        }
                     }
                     Button {
                         text: "x";
@@ -1157,18 +1241,13 @@ export component AppWindow inherits Window {
             
             VerticalLayout {
                 spacing: 4px;
-                Text { text: "расход за 15 polling-точек"; font-size: 11px; color: #7d8590; }
+                Text { text: "живой расход за 5 минут"; font-size: 11px; color: #7d8590; }
                 HorizontalLayout {
-                    height: 28px;
-                    spacing: 2px;
-                    alignment: start;
-                    for val in root.overlay-spark-data : Rectangle {
-                        width: 14px;
-                        height: max(2px, parent.height * val / 100);
-                        y: parent.height - self.height;
-                        background: root.overlay-delta-level == "danger" ? #f85149 : root.overlay-delta-level == "warning" ? #d29922 : #3fb950;
-                        border-radius: 2px;
-                        opacity: 0.8;
+                    height: 88px;
+                    alignment: center;
+                    PulseOrganism {
+                        level: root.overlay-delta-level;
+                        phase: root.overlay-pulse-phase;
                     }
                 }
             }
@@ -1265,7 +1344,10 @@ export component AppWindow inherits Window {
                     root.overlay-drag-move((self.mouse-x - self.pressed-x) / 1px, (self.mouse-y - self.pressed-y) / 1px);
                 }
             }
-            clicked => { root.is-compact = false; }
+            clicked => {
+                root.is-compact = false;
+                root.overlay-compact-changed(false);
+            }
         }
     }
 }

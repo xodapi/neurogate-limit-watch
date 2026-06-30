@@ -28,6 +28,25 @@ thread_local! {
 const OVERLAY_RATE_WINDOW: Duration = Duration::from_secs(5 * 60);
 const OVERLAY_HISTORY_RETENTION: Duration = Duration::from_secs(30 * 60);
 const OVERLAY_SPARK_SAMPLES: usize = 15;
+const OVERLAY_COMPACT_SIZE: (f32, f32) = (260.0, 52.0);
+const OVERLAY_FULL_SIZE: (f32, f32) = (340.0, 380.0);
+
+fn overlay_logical_size(compact: bool) -> (f32, f32) {
+    if compact {
+        OVERLAY_COMPACT_SIZE
+    } else {
+        OVERLAY_FULL_SIZE
+    }
+}
+
+fn set_overlay_window_size(app: &AppWindow, compact: bool) {
+    let (width, height) = overlay_logical_size(compact);
+    let scale = app.window().scale_factor();
+    app.window().set_size(PhysicalSize::new(
+        (width * scale).round() as u32,
+        (height * scale).round() as u32,
+    ));
+}
 
 fn create_status_icon(color: (u8, u8, u8)) -> Icon {
     let width = 32;
@@ -196,6 +215,7 @@ fn main() {
         if is_compact {
             app.set_is_compact(true);
         }
+        set_overlay_window_size(&app, is_compact);
     }
 
     // Initialize System Tray
@@ -233,6 +253,13 @@ fn main() {
 
     app.on_close_overlay(move || {
         let _ = slint::quit_event_loop();
+    });
+
+    let weak = app.as_weak();
+    app.on_overlay_compact_changed(move |compact| {
+        if let Some(app) = weak.upgrade() {
+            set_overlay_window_size(&app, compact);
+        }
     });
 
     let drag_origin = Arc::new(Mutex::new(None::<PhysicalPosition>));
@@ -275,11 +302,20 @@ fn main() {
             if let Some(origin) = *resize_origin_move.lock().unwrap() {
                 let scale = app.window().scale_factor();
                 let min_width = if app.get_is_compact() { 220.0 } else { 300.0 };
-                let min_height = if app.get_is_compact() { 48.0 } else { 300.0 };
+                let min_height = if app.get_is_compact() { 48.0 } else { 340.0 };
                 let width = (origin.width as f32 + dx * scale).max(min_width * scale) as u32;
                 let height = (origin.height as f32 + dy * scale).max(min_height * scale) as u32;
                 app.window().set_size(PhysicalSize::new(width, height));
             }
+        }
+    });
+
+    let pulse_timer = Timer::default();
+    let weak = app.as_weak();
+    pulse_timer.start(TimerMode::Repeated, Duration::from_millis(80), move || {
+        if let Some(app) = weak.upgrade() {
+            let next = (app.get_overlay_pulse_phase() + 7.0) % 360.0;
+            app.set_overlay_pulse_phase(next);
         }
     });
 
@@ -1304,6 +1340,12 @@ mod tests {
         assert_eq!(one_decimal_local(3.25), "3,2");
         assert_eq!(format_overlay_countdown(-1), "unknown");
         assert_eq!(format_overlay_countdown(125), "через 2м");
+    }
+
+    #[test]
+    fn overlay_size_switches_between_full_and_compact() {
+        assert_eq!(overlay_logical_size(false), (340.0, 380.0));
+        assert_eq!(overlay_logical_size(true), (260.0, 52.0));
     }
 
     #[test]
