@@ -44,6 +44,7 @@ const OVERLAY_COMPACT_SIZE: (f32, f32) = (260.0, 52.0);
 const OVERLAY_FULL_SIZE: (f32, f32) = (340.0, 380.0);
 const CREATURE_MIN_POINTS: usize = 8;
 const CREATURE_MAX_POINTS: usize = 128;
+const CREATURE_ORGANIC_MAX_POINTS: usize = 64;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -77,6 +78,30 @@ fn creature_node_count(percent: f32) -> usize {
         .clamp(CREATURE_MIN_POINTS, CREATURE_MAX_POINTS)
 }
 
+fn organic_creature_node_count(percent: f32) -> usize {
+    let normalized = percent.clamp(0.0, 100.0) / 100.0;
+    (CREATURE_MIN_POINTS
+        + (normalized * (CREATURE_ORGANIC_MAX_POINTS - CREATURE_MIN_POINTS) as f32).floor()
+            as usize)
+        .clamp(CREATURE_MIN_POINTS, CREATURE_ORGANIC_MAX_POINTS)
+}
+
+fn creature_node_count_for_skin(percent: f32, skin: i32) -> usize {
+    if skin == 1 {
+        organic_creature_node_count(percent)
+    } else {
+        creature_node_count(percent)
+    }
+}
+
+fn creature_path_commands_for_skin(percent: f32, phase: f32, skin: i32) -> String {
+    if skin == 1 {
+        organic_creature_path_commands(percent, phase)
+    } else {
+        creature_path_commands(percent, phase)
+    }
+}
+
 fn creature_path_commands(percent: f32, phase: f32) -> String {
     let count = creature_node_count(percent);
     let center_x = 52.0f32;
@@ -95,6 +120,44 @@ fn creature_path_commands(percent: f32, phase: f32) -> String {
         ));
     }
 
+    smooth_closed_path(&points)
+}
+
+fn organic_creature_path_commands(percent: f32, phase: f32) -> String {
+    let count = organic_creature_node_count(percent);
+    let normalized = percent.clamp(0.0, 100.0) / 100.0;
+    let center_x = 52.0f32;
+    let center_y = 44.0f32;
+    let base_radius = 24.0 + normalized * 10.0;
+    let amplitude = 3.0 + normalized * 5.0;
+    let waves = 3.0 + (normalized * 5.0).round();
+    let speed = if percent >= 90.0 {
+        3.0
+    } else if percent >= 75.0 {
+        1.7
+    } else {
+        0.7
+    };
+    let time = phase.to_radians();
+    let mut points = Vec::with_capacity(count);
+
+    for idx in 0..count {
+        let theta = (idx as f32 / count as f32) * std::f32::consts::TAU;
+        let primary = (waves * theta + speed * time).sin();
+        let secondary = ((waves * 0.5 + 1.0) * theta - speed * time * 0.65).sin() * 0.35;
+        let breath = (time * 0.4).sin() * (1.4 + normalized * 1.8);
+        let radius = (base_radius + amplitude * (primary + secondary) + breath).clamp(20.0, 39.0);
+        points.push((
+            center_x + radius * theta.cos(),
+            center_y + radius * theta.sin(),
+        ));
+    }
+
+    smooth_closed_path(&points)
+}
+
+fn smooth_closed_path(points: &[(f32, f32)]) -> String {
+    let count = points.len();
     let mut commands = String::with_capacity(count * 34);
     let (start_x, start_y) = points[0];
     commands.push_str(&format!("M {:.2} {:.2} ", start_x, start_y));
@@ -534,8 +597,11 @@ fn main() {
             let next = (app.get_overlay_pulse_phase() + 7.0) % 360.0;
             app.set_overlay_pulse_phase(next);
             let percent = app.get_overlay_creature_percent();
-            app.set_overlay_creature_points(creature_node_count(percent) as i32);
-            app.set_overlay_creature_path(creature_path_commands(percent, next).into());
+            let skin = app.get_overlay_creature_skin();
+            app.set_overlay_creature_points(creature_node_count_for_skin(percent, skin) as i32);
+            app.set_overlay_creature_path(
+                creature_path_commands_for_skin(percent, next, skin).into(),
+            );
         }
     });
 
@@ -984,8 +1050,6 @@ struct OverlayState {
     percent_hour_text: String,
     spark_data: Vec<f32>,
     creature_percent: f32,
-    creature_points: i32,
-    creature_path: String,
     delta_text: String,
     delta_level: String,
     reset_label: String,
@@ -1076,8 +1140,19 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
             app.set_overlay_reset_seconds(res.overlay.reset_seconds);
             app.set_overlay_reset_text(format_overlay_countdown(res.overlay.reset_seconds).into());
             app.set_overlay_creature_percent(res.overlay.creature_percent);
-            app.set_overlay_creature_points(res.overlay.creature_points);
-            app.set_overlay_creature_path(res.overlay.creature_path.into());
+            let skin = app.get_overlay_creature_skin();
+            app.set_overlay_creature_points(creature_node_count_for_skin(
+                res.overlay.creature_percent,
+                skin,
+            ) as i32);
+            app.set_overlay_creature_path(
+                creature_path_commands_for_skin(
+                    res.overlay.creature_percent,
+                    app.get_overlay_pulse_phase(),
+                    skin,
+                )
+                .into(),
+            );
 
             if let Some(latest) = ng::cli::update::latest_checked_version() {
                 app.set_new_version_label(latest.into());
@@ -1415,8 +1490,6 @@ fn build_overlay_state(
     let spark_data = scale_samples(&samples);
     let token_rate = parse_rate_value(token_rate_text).unwrap_or(credit_rate * 750.0);
     let creature_percent = five.map(|window| window.percent as f32).unwrap_or(0.0);
-    let creature_points = creature_node_count(creature_percent) as i32;
-    let creature_path = creature_path_commands(creature_percent, 0.0);
     let percent_hour = if credit_limit > 0.0 {
         (credit_rate as f64 / credit_limit * 60.0 * 100.0) as f32
     } else {
@@ -1431,8 +1504,6 @@ fn build_overlay_state(
         percent_hour_text: format!("{}%/час", one_decimal_local(percent_hour)),
         spark_data,
         creature_percent,
-        creature_points,
-        creature_path,
         delta_text,
         delta_level,
         reset_label,
@@ -1601,6 +1672,25 @@ mod tests {
         assert!(path.starts_with("M "));
         assert_eq!(path.matches("C ").count(), 101);
         assert!(path.ends_with('Z'));
+    }
+
+    #[test]
+    fn organic_creature_skin_keeps_lower_point_cap() {
+        assert_eq!(organic_creature_node_count(0.0), 8);
+        assert_eq!(organic_creature_node_count(78.0), 51);
+        assert_eq!(organic_creature_node_count(100.0), 64);
+        assert_eq!(creature_node_count_for_skin(78.0, 0), 101);
+        assert_eq!(creature_node_count_for_skin(78.0, 1), 51);
+    }
+
+    #[test]
+    fn organic_creature_skin_uses_smooth_path() {
+        let path = creature_path_commands_for_skin(78.0, 42.0, 1);
+
+        assert!(path.starts_with("M "));
+        assert_eq!(path.matches("C ").count(), 51);
+        assert!(path.ends_with('Z'));
+        assert_ne!(path, creature_path_commands_for_skin(78.0, 42.0, 0));
     }
 
     #[test]

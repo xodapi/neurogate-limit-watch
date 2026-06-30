@@ -443,6 +443,7 @@ export component AppWindow inherits Window {
     in property <string> overlay-creature-path: "";
     in property <int> overlay-creature-points: 8;
     in property <float> overlay-creature-percent: 0;
+    in-out property <int> overlay-creature-skin: 0;
     in-out property <float> overlay-pulse-phase: 0;
     in-out property <bool> stealth-mode: false;
     in property <string> active-endpoint-label: "";
@@ -1275,7 +1276,23 @@ export component AppWindow inherits Window {
             
             VerticalLayout {
                 spacing: 4px;
-                Text { text: "живой расход · \{root.overlay-creature-points} точек"; font-size: 11px; color: #7d8590; }
+                HorizontalLayout {
+                    Text {
+                        text: "живой расход · \{root.overlay-creature-points} точек";
+                        font-size: 11px;
+                        color: #7d8590;
+                        vertical-alignment: center;
+                    }
+                    Rectangle {}
+                    Button {
+                        text: root.overlay-creature-skin == 0 ? "скин: шипы" : "скин: органика";
+                        width: 118px;
+                        height: 24px;
+                        clicked => {
+                            root.overlay-creature-skin = root.overlay-creature-skin == 0 ? 1 : 0;
+                        }
+                    }
+                }
                 HorizontalLayout {
                     height: 88px;
                     alignment: center;
