@@ -12,7 +12,7 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tray_icon::{
@@ -26,6 +26,15 @@ slint::include_modules!();
 
 thread_local! {
     static TRAY_ICON: RefCell<Option<TrayIcon>> = const { RefCell::new(None) };
+}
+
+static CREATURE_SOUND_LEVEL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    #[link_name = "Beep"]
+    fn windows_beep(dw_freq: u32, dw_duration: u32) -> i32;
 }
 
 const OVERLAY_RATE_WINDOW: Duration = Duration::from_secs(5 * 60);
@@ -103,6 +112,75 @@ fn creature_path_commands(percent: f32, phase: f32) -> String {
     }
     commands.push('Z');
     commands
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CreatureSound {
+    Warning,
+    Danger,
+    Recovery,
+}
+
+fn level_rank(level: &str) -> u8 {
+    match level {
+        "danger" => 2,
+        "warning" => 1,
+        _ => 0,
+    }
+}
+
+fn creature_sound_for_transition(previous: Option<&str>, current: &str) -> Option<CreatureSound> {
+    let previous = previous?;
+    let previous_rank = level_rank(previous);
+    let current_rank = level_rank(current);
+
+    if current_rank == previous_rank {
+        return None;
+    }
+    if current_rank == 2 && previous_rank < 2 {
+        Some(CreatureSound::Danger)
+    } else if current_rank == 1 && previous_rank == 0 {
+        Some(CreatureSound::Warning)
+    } else if previous_rank == 2 && current_rank == 0 {
+        Some(CreatureSound::Recovery)
+    } else {
+        None
+    }
+}
+
+fn maybe_play_creature_sound(current_level: &str) {
+    let state = CREATURE_SOUND_LEVEL.get_or_init(|| Mutex::new(None));
+    let mut previous = state.lock().unwrap();
+    let sound = creature_sound_for_transition(previous.as_deref(), current_level);
+    *previous = Some(current_level.to_string());
+    drop(previous);
+
+    if let Some(sound) = sound {
+        thread::spawn(move || play_creature_sound_blocking(sound));
+    }
+}
+
+fn play_creature_sound_blocking(sound: CreatureSound) {
+    #[cfg(windows)]
+    unsafe {
+        match sound {
+            CreatureSound::Warning => {
+                let _ = windows_beep(440, 200);
+            }
+            CreatureSound::Danger => {
+                let _ = windows_beep(440, 150);
+                let _ = windows_beep(220, 150);
+            }
+            CreatureSound::Recovery => {
+                let _ = windows_beep(880, 150);
+            }
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = sound;
+    }
 }
 
 fn create_status_icon(color: (u8, u8, u8)) -> Icon {
@@ -970,6 +1048,13 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
     match result {
         Ok(res) => {
             let dashboard = res.dashboard;
+            let creature_level = dashboard
+                .windows
+                .iter()
+                .find(|window| window.key == "5h")
+                .map(|window| window.level.as_str())
+                .unwrap_or("ok");
+            maybe_play_creature_sound(creature_level);
             app.set_status_text(dashboard.status.into());
             app.set_source_text(dashboard.source.into());
             app.set_agent_text(dashboard.agent.into());
@@ -1516,6 +1601,32 @@ mod tests {
         assert!(path.starts_with("M "));
         assert_eq!(path.matches("C ").count(), 101);
         assert!(path.ends_with('Z'));
+    }
+
+    #[test]
+    fn creature_sound_only_fires_on_relevant_transitions() {
+        assert_eq!(creature_sound_for_transition(None, "warning"), None);
+        assert_eq!(
+            creature_sound_for_transition(Some("ok"), "warning"),
+            Some(CreatureSound::Warning)
+        );
+        assert_eq!(
+            creature_sound_for_transition(Some("warning"), "danger"),
+            Some(CreatureSound::Danger)
+        );
+        assert_eq!(
+            creature_sound_for_transition(Some("ok"), "danger"),
+            Some(CreatureSound::Danger)
+        );
+        assert_eq!(
+            creature_sound_for_transition(Some("danger"), "ok"),
+            Some(CreatureSound::Recovery)
+        );
+        assert_eq!(
+            creature_sound_for_transition(Some("warning"), "warning"),
+            None
+        );
+        assert_eq!(creature_sound_for_transition(Some("warning"), "ok"), None);
     }
 
     #[test]
