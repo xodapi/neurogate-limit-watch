@@ -1,11 +1,14 @@
-#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
+#![cfg_attr(windows, windows_subsystem = "windows")]
 #![allow(clippy::collapsible_if)]
 
+use serde_json::Value;
 use slint::{
     ComponentHandle, PhysicalPosition, PhysicalSize, SharedString, Timer, TimerMode, Weak,
 };
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -30,6 +33,15 @@ const OVERLAY_HISTORY_RETENTION: Duration = Duration::from_secs(30 * 60);
 const OVERLAY_SPARK_SAMPLES: usize = 15;
 const OVERLAY_COMPACT_SIZE: (f32, f32) = (260.0, 52.0);
 const OVERLAY_FULL_SIZE: (f32, f32) = (340.0, 380.0);
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+fn suppress_windows_console(_command: &mut Command) {
+    #[cfg(windows)]
+    {
+        _command.creation_flags(CREATE_NO_WINDOW);
+    }
+}
 
 fn overlay_logical_size(compact: bool) -> (f32, f32) {
     if compact {
@@ -90,6 +102,7 @@ fn spawn_mini_overlay(force_demo: bool) -> Result<(), String> {
     if force_demo {
         command.arg("--demo");
     }
+    suppress_windows_console(&mut command);
     command
         .spawn()
         .map(|_| ())
@@ -166,10 +179,91 @@ fn open_path(path: &Path) -> Result<(), String> {
         command.arg(path);
         command
     };
+    suppress_windows_console(&mut command);
     command
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("cannot open {}: {error}", path.display()))
+}
+
+fn read_agent_status_for_gui(binary: &str) -> ng::AgentStatus {
+    if binary.trim().is_empty() {
+        return ng::AgentStatus {
+            summary: "агенты: abtop отключён; задайте ABTOP_BIN".to_string(),
+            token_rate: "токены/мин: нет данных abtop".to_string(),
+        };
+    }
+
+    let mut command = Command::new(binary);
+    command.arg("--status-json");
+    suppress_windows_console(&mut command);
+    let Ok(output) = command.output() else {
+        return ng::AgentStatus {
+            summary: "агенты: abtop не найден; задайте ABTOP_BIN".to_string(),
+            token_rate: "токены/мин: нет данных abtop".to_string(),
+        };
+    };
+    if !output.status.success() {
+        return ng::AgentStatus {
+            summary: "агенты: статус abtop недоступен".to_string(),
+            token_rate: "токены/мин: нет данных abtop".to_string(),
+        };
+    }
+    let Ok(parsed) = serde_json::from_slice::<Value>(&output.stdout) else {
+        return ng::AgentStatus {
+            summary: "агенты: abtop вернул невалидный JSON".to_string(),
+            token_rate: "токены/мин: нет данных abtop".to_string(),
+        };
+    };
+    let sessions = parsed
+        .get("sessions_total")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let active = parsed
+        .get("sessions_active")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let ctx = parsed
+        .get("agents")
+        .and_then(Value::as_array)
+        .and_then(|agents| {
+            agents
+                .iter()
+                .filter_map(|agent| agent.get("max_context_pct").and_then(ng::to_number))
+                .fold(None, |peak: Option<f64>, value| {
+                    Some(peak.map_or(value, |peak| peak.max(value)))
+                })
+        })
+        .map(|value| format!("{value:.0}%"))
+        .unwrap_or_else(|| "н/д".to_string());
+    let token_rate = parsed
+        .get("token_rate")
+        .and_then(ng::to_number)
+        .or_else(|| summed_agent_token_rate_for_gui(&parsed));
+
+    ng::AgentStatus {
+        summary: format!("агенты: сессий {sessions}, активных {active}, контекст макс. {ctx}"),
+        token_rate: token_rate
+            .map(|value| format!("токены/мин: {}", ng::short_rate(value)))
+            .unwrap_or_else(|| "токены/мин: нет данных abtop".to_string()),
+    }
+}
+
+fn summed_agent_token_rate_for_gui(parsed: &Value) -> Option<f64> {
+    parsed
+        .get("agents")
+        .and_then(Value::as_array)
+        .and_then(|agents| {
+            let mut total = 0.0;
+            let mut seen = false;
+            for agent in agents {
+                if let Some(rate) = agent.get("token_rate").and_then(ng::to_number) {
+                    total += rate;
+                    seen = true;
+                }
+            }
+            seen.then_some(total)
+        })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1055,7 +1149,7 @@ fn load_dashboard(
             ng::demo_payload(),
             "источник: встроенные демо-данные".to_string(),
             "demo".to_string(),
-            ng::DEFAULT_ABTOP_BIN.to_string(),
+            String::new(),
             false,
         )
     } else if let Some(path) = mock_path {
@@ -1063,7 +1157,7 @@ fn load_dashboard(
             ng::load_mock(path)?,
             format!("источник: mock {}", path),
             "mock".to_string(),
-            ng::DEFAULT_ABTOP_BIN.to_string(),
+            String::new(),
             false,
         )
     } else {
@@ -1093,7 +1187,7 @@ fn load_dashboard(
 
     let windows = ng::summarize_me(&payload, warning, danger);
     let status = ng::dashboard_status(&windows);
-    let agent = ng::read_agent_status(&abtop_bin);
+    let agent = read_agent_status_for_gui(&abtop_bin);
     let overlay = build_overlay_state(&windows, &agent.token_rate, overlay_history);
 
     // Save snapshot to TrendStore and load trend data
@@ -1292,8 +1386,7 @@ fn runtime_config(
             .or_else(|| ng::config_value("VIBEMODE_API_BASE", dotenv))
             .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
         api_key: ng::config_value(api_key_env, dotenv).unwrap_or_default(),
-        abtop_bin: ng::config_value("ABTOP_BIN", dotenv)
-            .unwrap_or_else(|| ng::DEFAULT_ABTOP_BIN.to_string()),
+        abtop_bin: ng::config_value("ABTOP_BIN", dotenv).unwrap_or_default(),
     }
 }
 
@@ -1346,6 +1439,22 @@ mod tests {
     fn overlay_size_switches_between_full_and_compact() {
         assert_eq!(overlay_logical_size(false), (340.0, 380.0));
         assert_eq!(overlay_logical_size(true), (260.0, 52.0));
+    }
+
+    #[test]
+    fn gui_agent_status_handles_missing_binary() {
+        let status = read_agent_status_for_gui("__vimit_missing_abtop_binary__");
+
+        assert_eq!(status.summary, "агенты: abtop не найден; задайте ABTOP_BIN");
+        assert_eq!(status.token_rate, "токены/мин: нет данных abtop");
+    }
+
+    #[test]
+    fn gui_agent_status_is_disabled_without_abtop_bin() {
+        let status = read_agent_status_for_gui("");
+
+        assert_eq!(status.summary, "агенты: abtop отключён; задайте ABTOP_BIN");
+        assert_eq!(status.token_rate, "токены/мин: нет данных abtop");
     }
 
     #[test]
