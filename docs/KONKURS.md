@@ -1,141 +1,126 @@
-# Заявка на конкурс: vimit
+# Конкурсная заявка: vimit
 
-## Название
+## Название:
 
-`vimit` - безопасный монитор лимитов VibeMode / VibeMod.PRO для вайбкодеров.
+**vimit** - безопасный локальный монитор лимитов VibeMode / VibeMod.PRO для вайбкодеров.
 
-## Что делает
+## Что делает:
 
-`vimit` показывает текущий расход и остатки лимитов VibeMode по данным `GET /v1/me`:
+`vimit` показывает расход, остаток и риск достижения лимитов VibeMode по данным `GET /v1/me`.
 
-- CLI-вывод для быстрых проверок и скриптов.
+Основные режимы:
+
+- CLI для быстрой проверки лимитов и скриптов.
 - TUI-dashboard в терминале для постоянного мониторинга.
-- Slint GUI с карточками лимитов, недельным donut chart и tray-индикатором.
-- Маленькое floating overlay поверх окон с графиком расхода, pin, compact-режимом, drag/resize и переключением единиц (`кред/мин`, `ток/мин`, `%/час`).
-- Desktop notifications по warning/danger/recovery.
+- Slint GUI с карточками лимитов, настройками, tray-индикатором и setup-подсказками.
+- Floating overlay поверх рабочих окон с compact/full режимом, drag/resize, pin, переключением `кред/мин`, `ток/мин`, `%/час`.
+- Living creature overlay: визуальная форма расхода, skins `шипы` и `органика`, цвет по уровню риска, звуки при смене уровня.
+- Desktop notifications для warning/danger/recovery.
+- Demo/mock режимы без API-ключа.
 - `doctor` и `init` для диагностики и первичной настройки.
-- Demo/mock режимы без реального API-ключа.
 
-Проект решает практическую боль: во время работы в Codex, Droid, Claude Code, Cursor и других инструментах пользователь видит лимиты заранее, а не узнаёт о проблеме после отказа API.
+Задача проекта: пользователь видит лимиты заранее во время работы в Droid, Codex, Claude Code, Cursor и других AI-инструментах, а не узнаёт о проблеме после отказа API.
 
-## Для кого полезно
+## Для кого полезно:
 
 - Пользователям VibeMode / VibeMod.PRO, которые активно работают через API.
-- Вайбкодерам, которые держат открытыми Codex, Droid, Claude Code, Cursor и хотят видеть лимиты рядом с рабочим окном.
-- Тем, кому нужен локальный, безопасный и проверяемый монитор без отправки ключей в сторонние сервисы.
-- Тем, кто хочет диагностировать конфиги, `.env`, endpoint и сетевые ошибки без ручного разбора логов.
+- Вайбкодерам, которые держат открытыми AI-инструменты и хотят видеть лимиты рядом с рабочим окном.
+- Тем, кому нужен локальный монитор без отправки API-ключей в сторонние сервисы.
+- Тем, кто хочет быстро диагностировать `.env`, endpoint, account config и сетевые ошибки.
 
-## GitHub
+## GitHub:
 
 https://github.com/xodapi/vimit
 
-## Как запустить
+## Как запустить:
 
-### Быстрая проверка без ключа
+### Быстрый запуск без ключа
 
 ```powershell
 git clone https://github.com/xodapi/vimit.git
 cd vimit
-cargo run --locked -- --demo
-cargo run --locked -- --monitor --demo
-cargo run --features gui --locked --bin vimit-gui -- --demo
-```
-
-### Сборка release-бинарей
-
-```powershell
 cargo build --release --features gui --locked
-```
-
-После сборки:
-
-```powershell
 .\target\release\vimit.exe --demo
 .\target\release\vimit.exe --monitor --demo
-.\target\release\vimit.exe --overlay --demo
 .\target\release\vimit-gui.exe --demo
+.\target\release\vimit-gui.exe --demo --overlay
 ```
 
-### Настройка live-лимитов
+### Live-режим с реальными лимитами
 
-```powershell
-.\target\release\vimit.exe --init
-.\target\release\vimit.exe doctor
-```
-
-Основной ключ:
+Создать `.env` рядом с бинарником или в папке конфига:
 
 ```powershell
 VIBEMODE_API_KEY=<your-api-key>
-```
-
-Опциональный endpoint:
-
-```powershell
 VIBEMODE_API_BASE=https://r-api.vibemod.pro
 ```
 
-Для VPN-режима используется актуальный endpoint VibeMod.PRO:
+Затем:
 
 ```powershell
-.\target\release\vimit.exe --vpn
+.\target\release\vimit.exe doctor
+.\target\release\vimit.exe
+.\target\release\vimit-gui.exe
 ```
 
-## Какие ОС поддерживаются
+Для первичной настройки:
+
+```powershell
+.\target\release\vimit.exe --init
+```
+
+## Какие ОС поддерживаются:
 
 - Windows x86_64.
 - Linux x86_64 / aarch64.
 - macOS aarch64.
 
-GUI построен на Slint, TUI построен на ratatui. CI проверяет Windows, Linux и macOS.
+CI проверяет Windows, Linux и macOS. GUI построен на Slint, TUI построен на ratatui.
 
-## Что уже работает
+## Что уже работает:
 
-- Получение лимитов через `GET /v1/me`.
-- Окна лимитов: 5h, 24h, 7d, 30d.
-- Расчёт процентов, remaining, reset countdown и уровней `ok` / `warning` / `danger`.
-- CLI human / compact / JSON вывод.
-- TUI-monitor с темами и режимами отображения.
-- GUI-dashboard с карточками, donut chart и настройками.
-- Floating overlay поверх окон, включая compact-режим, drag/resize, pin и график расхода.
-- Tray tooltip/icon синхронизированы с текущим dashboard state.
+- Polling `GET /v1/me` и разбор окон 5h, 24h, 7d, 30d.
+- Расчёт used, limit, remaining, percent, reset countdown и уровней `ok` / `warning` / `danger`.
+- CLI human / compact / JSON.
+- TUI-monitor с темами, compact/full/mini preset и history sparkline.
+- GUI-dashboard с карточками лимитов, weekly donut chart, настройками и beginner setup flow.
+- Tray icon/tooltip, синхронизированные с текущим dashboard state.
+- Floating overlay поверх окон: запуск из GUI, drag, resize, compact/full переключение, pin, native resize без чёрного фонового окна.
+- Сглаженный `кред/мин` по 5-минутному окну, чтобы не было скачков `0 -> 10000` от одного poll.
+- Living creature overlay: skins `шипы` и `органика`, динамическое число точек, цвет по риску, Windows-звуки при смене уровня без запуска PowerShell/cmd.
+- Windows GUI subsystem для `vimit-gui.exe`, без фонового console window.
+- Demo/mock режимы для презентации без реального ключа.
 - Desktop notifications и recovery notifications.
-- Cache fallback без хранения API-ключа в открытом виде в cache key.
-- `vimit --init`, `vimit doctor`, account config, demo/mock режимы.
-- Защита от spam старым warning про `NEUROGATE_API_BASE`.
-- Базовые GUI-enabled тесты для overlay helpers и tray status formatting.
-- Локальные проверки: `cargo fmt --check`, `cargo test --locked`, `cargo test --locked --features gui`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features gui -- -D warnings`, `cargo build --release --features gui --locked`.
+- Cache fallback без раскрытия API-ключа в cache key.
+- Trends database `trends.redb` для накопления исторических snapshots.
+- `vimit doctor`, `vimit --init`, account config.
+- Совместимость с актуальными `VIBEMODE_*` переменными и legacy fallback для `NEUROGATE_*` без warning spam.
+- Тесты и проверки: `cargo fmt --check`, `cargo test --locked`, `cargo test --locked --features gui`, `cargo clippy --all-targets -- -D warnings`, `cargo clippy --all-targets --features gui -- -D warnings`, `cargo build --release --features gui --locked`.
 
-## Что ещё не готово
+## Что ещё не готово:
 
-- Финальные скриншоты/видео нужно добавить после визуального подтверждения текущего GUI/overlay.
-- GitHub Release с тегом и готовыми архивами нужно создавать отдельно после ручного решения о релизе.
-- Полноценные Slint UI interaction tests через публичный `slint::testing::*` зависят от доступности такого API/backend в используемой версии Slint. Сейчас добавлены поддерживаемые GUI-enabled unit tests для логики overlay/tray.
+- Tagged GitHub Release и архивы с бинарниками нужно создать отдельным ручным релизным шагом после финального approve.
+- Полноценные Slint interaction tests через публичный `slint::testing::*` пока не добавлены, потому что в текущей версии Slint публичный testing API/backend не используется проектом.
+- Форма creature будет дорабатываться после конкурса: рост от фактического token/credit spend за день, более сложная органика, отдельные настройки skins/sound.
+- Звуки сейчас реализованы через Windows `Beep`; на Linux/macOS это no-op до добавления кроссплатформенного audio backend.
 
-## Безопасность
+## Скрин/видео:
 
-- API-ключ берётся из `VIBEMODE_API_KEY` или локального `.env`.
-- Ключи, токены, cookies и личные данные не логируются.
-- Demo/mock режимы позволяют проверить интерфейс без реального ключа.
-- Сетевые запросы для лимитов идут к VibeMode / VibeMod.PRO API, основной публичный endpoint: `https://r-api.vibemod.pro`, VPN endpoint: `https://api.vibemod.pro`.
-- Старые `NEUROGATE_*` переменные поддерживаются только как legacy fallback после ребрендинга, пользователю показывается актуальное имя `VIBEMODE_*`.
+Demo GIF приложен в репозитории:
 
-## Скрин/видео
+`docs/vmit_demo_scren.gif`
 
-Финальные материалы нужно приложить к Telegram-заявке после визуальной проверки:
+Markdown-ссылка:
 
-- Screenshot CLI/TUI.
-- Screenshot основного GUI.
-- Screenshot floating overlay поверх рабочего окна.
-- Короткое видео: запуск `vimit --overlay --demo`, drag/resize overlay, переключение единиц и tray tooltip.
+![vimit demo](./vmit_demo_scren.gif)
 
 ## Готовый текст для отправки в ветку конкурса
 
 Название: vimit
 
-Что делает: локально показывает лимиты VibeMode / VibeMod.PRO из `GET /v1/me`: CLI, TUI, GUI, tray, desktop notifications и маленькое overlay поверх окон с графиком расхода.
+Что делает: локально показывает лимиты VibeMode / VibeMod.PRO из `GET /v1/me`: CLI, TUI, GUI, tray, desktop notifications и floating overlay поверх окон с расходом, reset countdown и living creature визуализацией.
 
-Для кого полезно: для вайбкодеров, которые работают через VibeMode API в Codex, Droid, Claude Code, Cursor и хотят заранее видеть расход, reset и риск достижения лимитов.
+Для кого полезно: для вайбкодеров, которые работают через VibeMode API в Droid, Codex, Claude Code, Cursor и хотят заранее видеть расход и риск достижения лимитов.
 
 GitHub: https://github.com/xodapi/vimit
 
@@ -147,15 +132,16 @@ cd vimit
 cargo build --release --features gui --locked
 .\target\release\vimit.exe --demo
 .\target\release\vimit.exe --monitor --demo
-.\target\release\vimit.exe --overlay --demo
+.\target\release\vimit-gui.exe --demo
+.\target\release\vimit-gui.exe --demo --overlay
 ```
 
-Live-режим: создать `.env` с `VIBEMODE_API_KEY`, затем запустить `vimit doctor` и `vimit`.
+Live-режим: создать `.env` с `VIBEMODE_API_KEY`, затем запустить `vimit doctor` и `vimit-gui`.
 
 Какие ОС поддерживаются: Windows x86_64, Linux x86_64/aarch64, macOS aarch64.
 
-Что уже работает: polling `GET /v1/me`, проценты по 5h/24h/7d/30d, reset countdown, CLI/TUI/GUI, draggable/resizable overlay, tray sync, notifications, setup/doctor, demo/mock, базовые тесты и CI.
+Что уже работает: polling `GET /v1/me`, проценты по 5h/24h/7d/30d, reset countdown, CLI/TUI/GUI, tray, draggable/resizable overlay, compact/full overlay, creature skins, sounds on level changes, setup/doctor, demo/mock, cache/trends, тесты и CI.
 
-Что ещё не готово: финальный tagged GitHub Release и скрин/видео после визуального approve.
+Что ещё не готово: tagged GitHub Release с архивами, кроссплатформенный audio backend, расширенные Slint interaction tests.
 
-Скрин/видео: приложить screenshots GUI/overlay/TUI и короткое видео overlay после финального визуального просмотра.
+Скрин/видео: `docs/vmit_demo_scren.gif`
