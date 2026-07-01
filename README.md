@@ -376,7 +376,7 @@ See [ROADMAP.md](ROADMAP.md) for the current improvement backlog.
 - Windows (x86_64)
 - macOS (aarch64)
 - Linux (x86_64, aarch64)
-- Android/Termux — see [docs/termux.md](docs/termux.md)
+- Android/Termux — see [docs/termux.md](docs/termux.md); native Slint Android spike is tracked in [docs/android.md](docs/android.md)
 
 ## Tests
 

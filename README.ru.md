@@ -366,7 +366,7 @@ https://github.com/xodapi/vimit/discussions
 - Windows (x86_64)
 - macOS (aarch64)
 - Linux (x86_64, aarch64)
-- Android/Termux — см. [docs/termux.md](docs/termux.md)
+- Android/Termux — см. [docs/termux.md](docs/termux.md); native Slint Android spike описан в [docs/android.md](docs/android.md)
 
 ## Тесты
 
