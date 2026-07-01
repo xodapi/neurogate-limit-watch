@@ -88,10 +88,16 @@ pub fn collect_status(
         ng::load_mock(path).map(|v| (v, 0, "mock".to_string()))
     } else {
         let start = Instant::now();
-        let result = if let Some(ref mut r) = router {
+        let result = if config.auto_failover
+            && config.api_base.trim_end_matches('/') == ng::DEFAULT_API_BASE
+            && let Some(ref mut r) = router
+        {
             http.fetch_me_with_retry(&config.api_key, r, &config.api_base)
         } else {
-            let mut fallback_router = ng::Router::new(config.api_base.clone(), vec![]);
+            let mut fallback_router = ng::Router::new(
+                config.api_base.clone(),
+                ng::api_fallbacks_for(&config.api_base, config.auto_failover),
+            );
             http.fetch_me_with_retry(&config.api_key, &mut fallback_router, &config.api_base)
         };
         let elapsed = start.elapsed().as_millis() as u64;
@@ -267,7 +273,7 @@ pub fn run_monitor(
     let mut account: Option<&AccountConfig> = None;
     let mut router = ng::Router::new(
         ng::DEFAULT_API_BASE.to_string(),
-        vec![ng::VPN_API_BASE.to_string()],
+        ng::api_fallbacks_for(ng::DEFAULT_API_BASE, args.auto_failover),
     );
     let mut daily_file = crate::cli::daily::DailyFile::load();
 
@@ -939,7 +945,9 @@ fn load_config(
             (base, args.api_key_env.as_str())
         }
     };
-    ng::RuntimeConfig::from_dotenv(api_base, api_key_env, args.env_file.as_ref())
+    let mut config = ng::RuntimeConfig::from_dotenv(api_base, api_key_env, args.env_file.as_ref())?;
+    config.auto_failover = args.auto_failover;
+    Ok(config)
 }
 
 fn draw_agents_panel(

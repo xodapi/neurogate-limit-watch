@@ -656,9 +656,15 @@ fn main() {
         ng::HttpClient::new(ng::USER_AGENT_GUI).expect("cannot initialize HTTP client"),
     );
 
+    let auto_api_failover = Arc::new(AtomicBool::new(
+        ng::cli::update::is_auto_api_failover_enabled(),
+    ));
     let router = std::sync::Arc::new(std::sync::Mutex::new(ng::Router::new(
         ng::DEFAULT_API_BASE.to_string(),
-        ng::Router::default_fallbacks(),
+        ng::api_fallbacks_for(
+            ng::DEFAULT_API_BASE,
+            auto_api_failover.load(Ordering::Relaxed),
+        ),
     )));
 
     let refresh_gen = Arc::new(AtomicU64::new(0));
@@ -704,6 +710,7 @@ fn main() {
     let history1 = overlay_history.clone();
     let demo_mode1 = demo_mode.clone();
     let mock_path1 = mock_path.clone();
+    let failover1 = auto_api_failover.clone();
     app.on_refresh_requested(move || {
         start_refresh(
             weak.clone(),
@@ -717,6 +724,7 @@ fn main() {
             gen1.clone(),
             is_ref1.clone(),
             history1.clone(),
+            failover1.clone(),
         );
     });
 
@@ -729,6 +737,7 @@ fn main() {
     let history2 = overlay_history.clone();
     let demo_mode2 = demo_mode.clone();
     let mock_path2 = mock_path.clone();
+    let failover2 = auto_api_failover.clone();
     app.on_demo_requested(move || {
         demo_mode2.store(true, Ordering::Relaxed);
         start_refresh(
@@ -743,6 +752,7 @@ fn main() {
             gen2.clone(),
             is_ref2.clone(),
             history2.clone(),
+            failover2.clone(),
         );
     });
 
@@ -755,6 +765,7 @@ fn main() {
     let history3 = overlay_history.clone();
     let demo_mode3 = demo_mode.clone();
     let mock_path3 = mock_path.clone();
+    let failover3 = auto_api_failover.clone();
     app.on_settings_changed(move |warning, danger| {
         start_refresh(
             weak.clone(),
@@ -768,6 +779,19 @@ fn main() {
             gen3.clone(),
             is_ref3.clone(),
             history3.clone(),
+            failover3.clone(),
+        );
+    });
+
+    let router_for_failover = router.clone();
+    let failover_for_toggle = auto_api_failover.clone();
+    app.on_auto_api_failover_changed(move |enabled| {
+        ng::cli::update::set_auto_api_failover_enabled(enabled);
+        failover_for_toggle.store(enabled, Ordering::Relaxed);
+        let mut router = router_for_failover.lock().unwrap();
+        *router = ng::Router::new(
+            ng::DEFAULT_API_BASE.to_string(),
+            ng::api_fallbacks_for(ng::DEFAULT_API_BASE, enabled),
         );
     });
 
@@ -781,6 +805,7 @@ fn main() {
     let history4 = overlay_history.clone();
     let demo_mode4 = demo_mode.clone();
     let mock_path4 = mock_path.clone();
+    let failover4 = auto_api_failover.clone();
     timer.start(TimerMode::Repeated, Duration::from_secs(10), move || {
         start_refresh(
             weak.clone(),
@@ -794,6 +819,7 @@ fn main() {
             gen4.clone(),
             is_ref4.clone(),
             history4.clone(),
+            failover4.clone(),
         );
     });
 
@@ -809,19 +835,25 @@ fn main() {
         refresh_gen.clone(),
         is_refreshing.clone(),
         overlay_history.clone(),
+        auto_api_failover.clone(),
     );
 
     if !force_demo
         && mock_path.is_none()
         && let Ok(dotenv) = gui_load_dotenv()
     {
-        let config = runtime_config(&dotenv, &current_acct);
+        let config = runtime_config(
+            &dotenv,
+            &current_acct,
+            auto_api_failover.load(Ordering::Relaxed),
+        );
         if config.api_key.is_empty() {
             app.set_needs_setup(true);
         }
     }
 
     app.set_auto_update_check(ng::cli::update::is_auto_check_enabled());
+    app.set_auto_api_failover(auto_api_failover.load(Ordering::Relaxed));
 
     app.on_auto_update_changed(|enabled| {
         ng::cli::update::set_auto_check_enabled(enabled);
@@ -1069,6 +1101,7 @@ fn start_refresh(
     generation: Arc<AtomicU64>,
     is_refreshing: Arc<std::sync::atomic::AtomicBool>,
     overlay_history: Arc<Mutex<OverlayHistory>>,
+    auto_failover: Arc<AtomicBool>,
 ) {
     if is_refreshing.swap(true, Ordering::SeqCst) {
         return;
@@ -1085,6 +1118,7 @@ fn start_refresh(
             danger,
             &router,
             &overlay_history,
+            auto_failover.load(Ordering::Relaxed),
         );
         if generation.load(Ordering::Relaxed) != my_gen {
             is_refreshing.store(false, Ordering::SeqCst);
@@ -1357,6 +1391,7 @@ fn load_dashboard(
     danger: f64,
     router: &Arc<Mutex<ng::Router>>,
     overlay_history: &Arc<Mutex<OverlayHistory>>,
+    auto_failover: bool,
 ) -> Result<GuiDashboardResult, String> {
     let (payload, source, active_endpoint_label, abtop_bin, live_api_key_present) = if force_demo {
         (
@@ -1376,7 +1411,7 @@ fn load_dashboard(
         )
     } else {
         let dotenv = gui_load_dotenv()?;
-        let config = runtime_config(&dotenv, account);
+        let config = runtime_config(&dotenv, account, auto_failover);
         if config.api_key.is_empty() {
             (
                 ng::demo_payload(),
@@ -1386,12 +1421,22 @@ fn load_dashboard(
                 false,
             )
         } else {
-            let mut r = router.lock().unwrap();
-            let (val, label) =
-                http.fetch_me_with_retry(&config.api_key, &mut r, &config.api_base)?;
+            let (val, label) = if config.auto_failover
+                && config.api_base.trim_end_matches('/') == ng::DEFAULT_API_BASE
+            {
+                let mut r = router.lock().unwrap();
+                http.fetch_me_with_retry(&config.api_key, &mut r, &config.api_base)?
+            } else {
+                let mut r = ng::Router::new(
+                    config.api_base.clone(),
+                    ng::api_fallbacks_for(&config.api_base, config.auto_failover),
+                );
+                http.fetch_me_with_retry(&config.api_key, &mut r, &config.api_base)?
+            };
+            let endpoint = endpoint_for_label(&label, &config.api_base);
             (
                 val,
-                format!("источник: live VibeMode /v1/me на {}", r.active_endpoint()),
+                format!("источник: live VibeMode /v1/me на {endpoint}"),
                 label,
                 config.abtop_bin,
                 true,
@@ -1588,6 +1633,7 @@ fn one_decimal_local(value: f32) -> String {
 fn runtime_config(
     dotenv: &HashMap<String, String>,
     account: &Arc<Mutex<Option<GuiAccount>>>,
+    auto_failover: bool,
 ) -> ng::RuntimeConfig {
     let acct = account.lock().unwrap();
     let (api_key_env, api_base_override) = match acct.as_ref() {
@@ -1603,6 +1649,15 @@ fn runtime_config(
             .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
         api_key: ng::config_value(api_key_env, dotenv).unwrap_or_default(),
         abtop_bin: ng::config_value("ABTOP_BIN", dotenv).unwrap_or_default(),
+        auto_failover,
+    }
+}
+
+fn endpoint_for_label(label: &str, configured_api_base: &str) -> String {
+    match label {
+        "api" => ng::DEFAULT_API_BASE.to_string(),
+        "r-api" => ng::FALLBACK_API_BASE.to_string(),
+        _ => configured_api_base.to_string(),
     }
 }
 
@@ -1655,6 +1710,33 @@ mod tests {
     fn overlay_size_switches_between_full_and_compact() {
         assert_eq!(overlay_logical_size(false), (340.0, 380.0));
         assert_eq!(overlay_logical_size(true), (260.0, 52.0));
+    }
+
+    #[test]
+    fn gui_runtime_config_keeps_auto_failover_setting() {
+        let dotenv = HashMap::new();
+        let account = Arc::new(Mutex::new(None));
+
+        let config = runtime_config(&dotenv, &account, false);
+
+        assert_eq!(config.api_base, ng::DEFAULT_API_BASE);
+        assert!(!config.auto_failover);
+    }
+
+    #[test]
+    fn endpoint_label_maps_to_visible_api_url() {
+        assert_eq!(
+            endpoint_for_label("api", "https://custom.example"),
+            ng::DEFAULT_API_BASE
+        );
+        assert_eq!(
+            endpoint_for_label("r-api", "https://custom.example"),
+            ng::FALLBACK_API_BASE
+        );
+        assert_eq!(
+            endpoint_for_label("custom", "https://custom.example"),
+            "https://custom.example"
+        );
     }
 
     #[test]

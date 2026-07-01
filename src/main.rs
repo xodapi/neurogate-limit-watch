@@ -181,8 +181,13 @@ fn real_main() -> Result<i32, String> {
     let mut notifier = Notifier::new(args.notify);
     let http = ng::HttpClient::new(ng::USER_AGENT)?;
     let mut router = ng::Router::new(
-        ng::DEFAULT_API_BASE.to_string(),
-        vec![ng::VPN_API_BASE.to_string()],
+        args.api_base
+            .clone()
+            .unwrap_or_else(|| ng::DEFAULT_API_BASE.to_string()),
+        ng::api_fallbacks_for(
+            args.api_base.as_deref().unwrap_or(ng::DEFAULT_API_BASE),
+            args.auto_failover,
+        ),
     );
     cli::update::start_background_check();
 
@@ -307,6 +312,7 @@ fn merge_args_with_config(args: Args, merged: &MergedConfig) -> Args {
         doctor: args.doctor,
         init: args.init,
         vpn: args.vpn,
+        auto_failover: args.auto_failover && merged.auto_failover,
         no_cache: args.no_cache,
         trend: args.trend,
         trend_days: args.trend_days,
@@ -329,12 +335,15 @@ fn load_config(args: &cli::args::Args) -> Result<ng::RuntimeConfig, String> {
             api_key: String::new(),
             abtop_bin: ng::config_value("ABTOP_BIN", &dotenv)
                 .unwrap_or_else(|| ng::DEFAULT_ABTOP_BIN.to_string()),
+            auto_failover: args.auto_failover,
         });
     }
 
-    ng::RuntimeConfig::from_dotenv(
+    let mut config = ng::RuntimeConfig::from_dotenv(
         args.api_base.clone(),
         &args.api_key_env,
         args.env_file.as_ref(),
-    )
+    )?;
+    config.auto_failover = args.auto_failover;
+    Ok(config)
 }

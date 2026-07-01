@@ -50,6 +50,7 @@ pub struct Args {
     pub doctor: bool,
     pub init: bool,
     pub vpn: bool,
+    pub auto_failover: bool,
     pub no_cache: bool,
     pub trend: bool,
     pub trend_days: u64,
@@ -88,6 +89,7 @@ where
         doctor: false,
         init: false,
         vpn: false,
+        auto_failover: true,
         no_cache: false,
         trend: false,
         trend_days: 30,
@@ -121,6 +123,7 @@ where
             "--doctor" => parsed.doctor = true,
             "--init" => parsed.init = true,
             "--vpn" => parsed.vpn = true,
+            "--no-failover" => parsed.auto_failover = false,
             "--no-cache" => parsed.no_cache = true,
             "--trend" => parsed.trend = true,
             "--days" => {
@@ -325,7 +328,8 @@ OPTIONS:
       update --check         Check for updates without installing
       --api-base <URL>       API base URL [env: VIBEMODE_API_BASE]
       --api-key-env <NAME>   API key environment variable [default: VIBEMODE_API_KEY]
-      --vpn                  Switch to VPN endpoint (api.vibemod.pro)
+      --vpn                  Switch to fallback endpoint (r-api.vibemod.pro)
+      --no-failover          Disable automatic api/r-api endpoint failover
   -V, --version              Print version
   -h, --help                 Print help
 
@@ -357,6 +361,13 @@ mod tests {
         .unwrap();
         assert!(args.notify);
         assert_eq!(args.watch, 60);
+        assert!(args.auto_failover);
+    }
+
+    #[test]
+    fn no_failover_disables_auto_endpoint_switching() {
+        let args = parse_args(["--no-failover".to_string()]).unwrap();
+        assert!(!args.auto_failover);
     }
 
     #[test]
