@@ -184,6 +184,68 @@ enum CreatureSound {
     Recovery,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CreatureState {
+    Sleeping,
+    Awake,
+    Alert,
+    Critical,
+    Recovery,
+}
+
+impl CreatureState {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Sleeping => "sleeping",
+            Self::Awake => "awake",
+            Self::Alert => "alert",
+            Self::Critical => "critical",
+            Self::Recovery => "recovery",
+        }
+    }
+}
+
+fn creature_state_for(
+    percent: f32,
+    credit_rate: f32,
+    reset_detected: bool,
+    samples_len: usize,
+) -> CreatureState {
+    if reset_detected {
+        return CreatureState::Recovery;
+    }
+    if samples_len > 1 && credit_rate <= 0.05 {
+        return CreatureState::Sleeping;
+    }
+    if percent >= 90.0 {
+        CreatureState::Critical
+    } else if percent >= 75.0 {
+        CreatureState::Alert
+    } else {
+        CreatureState::Awake
+    }
+}
+
+fn overlay_phase_step(state: CreatureState) -> f32 {
+    match state {
+        CreatureState::Sleeping => 2.0,
+        CreatureState::Awake => 7.0,
+        CreatureState::Alert => 9.0,
+        CreatureState::Critical => 13.0,
+        CreatureState::Recovery => 16.0,
+    }
+}
+
+fn creature_state_from_str(value: &str) -> CreatureState {
+    match value {
+        "sleeping" => CreatureState::Sleeping,
+        "alert" => CreatureState::Alert,
+        "critical" => CreatureState::Critical,
+        "recovery" => CreatureState::Recovery,
+        _ => CreatureState::Awake,
+    }
+}
+
 fn level_rank(level: &str) -> u8 {
     match level {
         "danger" => 2,
@@ -594,7 +656,8 @@ fn main() {
     let weak = app.as_weak();
     pulse_timer.start(TimerMode::Repeated, Duration::from_millis(80), move || {
         if let Some(app) = weak.upgrade() {
-            let next = (app.get_overlay_pulse_phase() + 7.0) % 360.0;
+            let state = creature_state_from_str(app.get_overlay_creature_state().as_str());
+            let next = (app.get_overlay_pulse_phase() + overlay_phase_step(state)) % 360.0;
             app.set_overlay_pulse_phase(next);
             let percent = app.get_overlay_creature_percent();
             let skin = app.get_overlay_creature_skin();
@@ -1033,7 +1096,11 @@ struct OverlayUsagePoint {
 }
 
 impl OverlayHistory {
-    fn record_usage(&mut self, at: Instant, used: f64) -> f32 {
+    fn record_usage(&mut self, at: Instant, used: f64) -> (f32, bool) {
+        let reset_detected = self
+            .observations
+            .back()
+            .is_some_and(|latest| used < latest.used);
         self.observations.push_back(OverlayUsagePoint { at, used });
         self.trim_observations(at);
 
@@ -1042,7 +1109,7 @@ impl OverlayHistory {
             self.samples.pop_front();
         }
         self.samples.push_back(rate);
-        rate
+        (rate, reset_detected)
     }
 
     fn average_credit_rate(&self, now: Instant) -> f32 {
@@ -1082,6 +1149,7 @@ struct OverlayState {
     percent_hour_text: String,
     spark_data: Vec<f32>,
     creature_percent: f32,
+    creature_state: CreatureState,
     delta_text: String,
     delta_level: String,
     reset_label: String,
@@ -1152,7 +1220,9 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
                 .find(|window| window.key == "5h")
                 .map(|window| window.level.as_str())
                 .unwrap_or("ok");
-            maybe_play_creature_sound(creature_level);
+            if res.overlay.creature_state != CreatureState::Sleeping {
+                maybe_play_creature_sound(creature_level);
+            }
             app.set_status_text(dashboard.status.into());
             app.set_source_text(dashboard.source.into());
             app.set_agent_text(dashboard.agent.into());
@@ -1174,6 +1244,7 @@ fn apply_dashboard(app: &AppWindow, result: Result<GuiDashboardResult, String>) 
             app.set_overlay_reset_seconds(res.overlay.reset_seconds);
             app.set_overlay_reset_text(format_overlay_countdown(res.overlay.reset_seconds).into());
             app.set_overlay_creature_percent(res.overlay.creature_percent);
+            app.set_overlay_creature_state(res.overlay.creature_state.as_str().into());
             let skin = app.get_overlay_creature_skin();
             app.set_overlay_creature_points(creature_node_count_for_skin(
                 res.overlay.creature_percent,
@@ -1527,7 +1598,7 @@ fn build_overlay_state(
         .unwrap_or(0.0);
 
     let mut history = history.lock().unwrap();
-    let credit_rate = current_used
+    let (credit_rate, reset_detected) = current_used
         .map(|used| history.record_usage(now, used))
         .unwrap_or_default();
 
@@ -1535,6 +1606,12 @@ fn build_overlay_state(
     let spark_data = scale_samples(&samples);
     let token_rate = parse_rate_value(token_rate_text).unwrap_or(credit_rate * 750.0);
     let creature_percent = five.map(|window| window.percent as f32).unwrap_or(0.0);
+    let creature_state = creature_state_for(
+        creature_percent,
+        credit_rate,
+        reset_detected,
+        history.samples.len(),
+    );
     let percent_hour = if credit_limit > 0.0 {
         (credit_rate as f64 / credit_limit * 60.0 * 100.0) as f32
     } else {
@@ -1549,6 +1626,7 @@ fn build_overlay_state(
         percent_hour_text: format!("{}%/час", one_decimal_local(percent_hour)),
         spark_data,
         creature_percent,
+        creature_state,
         delta_text,
         delta_level,
         reset_label,
@@ -1713,6 +1791,42 @@ mod tests {
     }
 
     #[test]
+    fn creature_state_uses_sleep_and_thresholds() {
+        assert_eq!(
+            creature_state_for(10.0, 0.0, false, 2),
+            CreatureState::Sleeping
+        );
+        assert_eq!(
+            creature_state_for(40.0, 0.2, false, 2),
+            CreatureState::Awake
+        );
+        assert_eq!(
+            creature_state_for(80.0, 0.2, false, 2),
+            CreatureState::Alert
+        );
+        assert_eq!(
+            creature_state_for(92.0, 0.2, false, 2),
+            CreatureState::Critical
+        );
+        assert_eq!(
+            creature_state_for(10.0, 0.0, true, 2),
+            CreatureState::Recovery
+        );
+    }
+
+    #[test]
+    fn creature_phase_step_slows_down_sleeping_state() {
+        assert!(
+            overlay_phase_step(CreatureState::Sleeping) < overlay_phase_step(CreatureState::Awake)
+        );
+        assert!(
+            overlay_phase_step(CreatureState::Critical) > overlay_phase_step(CreatureState::Alert)
+        );
+        assert_eq!(creature_state_from_str("sleeping"), CreatureState::Sleeping);
+        assert_eq!(creature_state_from_str("unknown"), CreatureState::Awake);
+    }
+
+    #[test]
     fn gui_runtime_config_keeps_auto_failover_setting() {
         let dotenv = HashMap::new();
         let account = Arc::new(Mutex::new(None));
@@ -1852,14 +1966,14 @@ mod tests {
         let mut history = OverlayHistory::default();
         let now = Instant::now();
 
-        assert_eq!(history.record_usage(now, 0.0), 0.0);
+        assert_eq!(history.record_usage(now, 0.0), (0.0, false));
         assert_eq!(
             history.record_usage(now + Duration::from_secs(10), 1_000.0),
-            200.0
+            (200.0, false)
         );
         assert_eq!(
             history.record_usage(now + Duration::from_secs(5 * 60), 1_500.0),
-            300.0
+            (300.0, false)
         );
     }
 
@@ -1874,5 +1988,16 @@ mod tests {
 
         assert_eq!(history.observations.len(), 1);
         assert_eq!(history.average_credit_rate(later), 0.0);
+    }
+
+    #[test]
+    fn overlay_history_detects_window_reset() {
+        let mut history = OverlayHistory::default();
+        let now = Instant::now();
+
+        assert_eq!(history.record_usage(now, 80.0), (0.0, false));
+        let (_, reset_detected) = history.record_usage(now + Duration::from_secs(60), 5.0);
+
+        assert!(reset_detected);
     }
 }

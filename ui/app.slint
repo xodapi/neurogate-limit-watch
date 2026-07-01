@@ -277,12 +277,15 @@ component DonutChart inherits Rectangle {
 
 component PulseOrganism inherits Rectangle {
     in property <string> level;
+    in property <string> creature-state;
     in property <float> phase;
     in property <string> commands;
     in property <int> node-count;
 
-    private property <brush> accent: root.level == "danger" ? #f85149 : root.level == "warning" ? #d29922 : #3fb950;
+    private property <brush> accent: root.creature-state == "sleeping" ? #6f7f96 : root.creature-state == "recovery" ? #9be9a8 : root.level == "danger" ? #f85149 : root.level == "warning" ? #d29922 : #3fb950;
     private property <bool> has-dynamic-shape: root.commands != "";
+    private property <float> energy-scale: root.creature-state == "sleeping" ? 0.78 : root.creature-state == "recovery" ? 1.10 : root.creature-state == "critical" ? 1.06 : 1.0;
+    private property <float> creature-opacity: root.creature-state == "sleeping" ? 0.58 : 0.88;
     private property <float> r0: 34 + 4 * sin(root.phase * 1deg);
     private property <float> r1: 32 + 5 * sin((root.phase + 48) * 1deg);
     private property <float> r2: 35 + 3 * sin((root.phase + 116) * 1deg);
@@ -301,14 +304,14 @@ component PulseOrganism inherits Rectangle {
         viewbox-height: 88;
         fill: root.accent;
         stroke: transparent;
-        opacity: 0.12;
+        opacity: root.creature-state == "sleeping" ? 0.08 : 0.12;
         visible: !root.has-dynamic-shape;
-        MoveTo { x: 52 + root.r0; y: 44; }
-        LineTo { x: 52 + root.r1 * 0.5; y: 44 + root.r1 * 0.866; }
-        LineTo { x: 52 - root.r2 * 0.5; y: 44 + root.r2 * 0.866; }
-        LineTo { x: 52 - root.r3; y: 44; }
-        LineTo { x: 52 - root.r4 * 0.5; y: 44 - root.r4 * 0.866; }
-        LineTo { x: 52 + root.r5 * 0.5; y: 44 - root.r5 * 0.866; }
+        MoveTo { x: 52 + root.r0 * root.energy-scale; y: 44; }
+        LineTo { x: 52 + root.r1 * root.energy-scale * 0.5; y: 44 + root.r1 * root.energy-scale * 0.866; }
+        LineTo { x: 52 - root.r2 * root.energy-scale * 0.5; y: 44 + root.r2 * root.energy-scale * 0.866; }
+        LineTo { x: 52 - root.r3 * root.energy-scale; y: 44; }
+        LineTo { x: 52 - root.r4 * root.energy-scale * 0.5; y: 44 - root.r4 * root.energy-scale * 0.866; }
+        LineTo { x: 52 + root.r5 * root.energy-scale * 0.5; y: 44 - root.r5 * root.energy-scale * 0.866; }
         Close {}
     }
 
@@ -319,8 +322,8 @@ component PulseOrganism inherits Rectangle {
         viewbox-height: 88;
         fill: transparent;
         stroke: root.accent;
-        stroke-width: 2.2px;
-        opacity: 0.86;
+        stroke-width: root.creature-state == "sleeping" ? 1.4px : 2.2px;
+        opacity: root.creature-opacity;
         visible: !root.has-dynamic-shape;
         MoveTo { x: 52 + root.r0; y: 44; }
         LineTo { x: 52 + root.r1 * 0.5; y: 44 + root.r1 * 0.866; }
@@ -356,7 +359,7 @@ component PulseOrganism inherits Rectangle {
         viewbox-height: 88;
         fill: root.accent;
         stroke: transparent;
-        opacity: 0.13;
+        opacity: root.creature-state == "sleeping" ? 0.08 : 0.13;
         visible: root.has-dynamic-shape;
         commands: root.commands;
     }
@@ -368,8 +371,8 @@ component PulseOrganism inherits Rectangle {
         viewbox-height: 88;
         fill: transparent;
         stroke: root.accent;
-        stroke-width: root.node-count > 64 ? 1.5px : 2.1px;
-        opacity: 0.88;
+        stroke-width: root.creature-state == "sleeping" ? 1.2px : root.node-count > 64 ? 1.5px : 2.1px;
+        opacity: root.creature-opacity;
         visible: root.has-dynamic-shape;
         commands: root.commands;
     }
@@ -381,7 +384,7 @@ component PulseOrganism inherits Rectangle {
         y: 35px;
         border-radius: 9px;
         background: root.accent;
-        opacity: 0.18 + 0.10 * sin(root.phase * 1deg);
+        opacity: root.creature-state == "sleeping" ? 0.10 + 0.04 * sin(root.phase * 1deg) : 0.18 + 0.10 * sin(root.phase * 1deg);
     }
 }
 
@@ -444,6 +447,7 @@ export component AppWindow inherits Window {
     in property <string> overlay-creature-path: "";
     in property <int> overlay-creature-points: 8;
     in property <float> overlay-creature-percent: 0;
+    in property <string> overlay-creature-state: "awake";
     in-out property <int> overlay-creature-skin: 0;
     in-out property <float> overlay-pulse-phase: 0;
     in-out property <bool> stealth-mode: false;
@@ -1288,7 +1292,7 @@ export component AppWindow inherits Window {
                 spacing: 4px;
                 HorizontalLayout {
                     Text {
-                        text: "живой расход · \{root.overlay-creature-points} точек";
+                        text: "живой расход · " + (root.overlay-creature-state == "sleeping" ? "спит" : root.overlay-creature-state == "alert" ? "насторожен" : root.overlay-creature-state == "critical" ? "тревога" : root.overlay-creature-state == "recovery" ? "выдох" : "бодрствует") + " · \{root.overlay-creature-points} точек";
                         font-size: 11px;
                         color: #7d8590;
                         vertical-alignment: center;
@@ -1308,6 +1312,7 @@ export component AppWindow inherits Window {
                     alignment: center;
                     PulseOrganism {
                         level: root.overlay-delta-level;
+                        creature-state: root.overlay-creature-state;
                         phase: root.overlay-pulse-phase;
                         commands: root.overlay-creature-path;
                         node-count: root.overlay-creature-points;
