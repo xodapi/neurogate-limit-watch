@@ -19,6 +19,7 @@ https://github.com/xodapi/vimit/discussions
 - Termux install guide.
 - Termux:Widget example that runs `vimit --demo` or `vimit --json`.
 - Optional Android notification through Termux:API.
+- Native Slint Android spike, see [docs/android.md](docs/android.md).
 
 ## Living Token Creature / Живое существо
 
