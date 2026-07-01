@@ -10,6 +10,9 @@ pub use parse::*;
 #[cfg(all(target_os = "android", feature = "android-gui"))]
 slint::include_modules!();
 
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+use slint::{ComponentHandle, SharedString, Weak};
+
 use chrono::{SecondsFormat, Utc};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -55,11 +58,239 @@ pub const DEFAULT_ABTOP_BIN: &str = "abtop";
 #[cfg(all(target_os = "android", feature = "android-gui"))]
 #[unsafe(no_mangle)]
 pub fn android_main(app: slint::android::AndroidApp) {
+    let data_dir = app.internal_data_path();
     slint::android::init(app).expect("cannot initialize Android backend");
-    AppWindow::new()
-        .expect("cannot initialize Slint window")
-        .run()
-        .expect("cannot run Slint window");
+    let window = AppWindow::new().expect("cannot initialize Slint window");
+    window.set_is_android(true);
+    window.set_needs_setup(false);
+
+    let key_path = android_key_path(data_dir);
+    let saved_key = android_load_api_key(&key_path).unwrap_or_default();
+    window.set_api_key_configured(!saved_key.is_empty());
+    window.set_setup_status_text("Вставьте VIBEMODE_API_KEY и нажмите Сохранить ключ.".into());
+
+    let key_state = std::sync::Arc::new(std::sync::Mutex::new(saved_key));
+    let path_for_save = key_path.clone();
+    let key_for_save = key_state.clone();
+    let weak = window.as_weak();
+    window.on_save_api_key(move |value| {
+        if let Some(window) = weak.upgrade() {
+            let key = value.trim().to_string();
+            if key.is_empty() {
+                window.set_error_text("API key пустой".into());
+                return;
+            }
+            match android_save_api_key(&path_for_save, &key) {
+                Ok(()) => {
+                    *key_for_save.lock().unwrap() = key;
+                    window.set_api_key_input("".into());
+                    window.set_api_key_configured(true);
+                    window.set_error_text("".into());
+                    window.set_status_text("Ключ сохранён. Нажмите Проверить.".into());
+                }
+                Err(error) => window.set_error_text(error.into()),
+            }
+        }
+    });
+
+    let key_for_refresh = key_state.clone();
+    let weak = window.as_weak();
+    window.on_refresh_requested(move || {
+        android_start_refresh(weak.clone(), key_for_refresh.clone(), false);
+    });
+
+    let key_for_demo = key_state.clone();
+    let weak = window.as_weak();
+    window.on_demo_requested(move || {
+        android_start_refresh(weak.clone(), key_for_demo.clone(), true);
+    });
+
+    android_start_refresh(window.as_weak(), key_state, false);
+    window.run().expect("cannot run Slint window");
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_key_path(data_dir: Option<PathBuf>) -> PathBuf {
+    data_dir
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("vimit-api-key")
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_load_api_key(path: &std::path::Path) -> Result<String, String> {
+    match fs::read_to_string(path) {
+        Ok(value) => Ok(value.trim().to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(format!("cannot read Android API key: {error}")),
+    }
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_save_api_key(path: &std::path::Path, key: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("cannot create Android config dir: {error}"))?;
+    }
+    fs::write(path, key).map_err(|error| format!("cannot save Android API key: {error}"))
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_start_refresh(
+    app: Weak<AppWindow>,
+    key_state: std::sync::Arc<std::sync::Mutex<String>>,
+    demo: bool,
+) {
+    std::thread::spawn(move || {
+        let result = android_load_dashboard(&key_state, demo);
+        let _ = app.upgrade_in_event_loop(move |app| android_apply_dashboard(&app, result));
+    });
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_load_dashboard(
+    key_state: &std::sync::Arc<std::sync::Mutex<String>>,
+    demo: bool,
+) -> Result<(Vec<WindowState>, String, String), String> {
+    if demo {
+        let windows = summarize_me(
+            &demo_payload(),
+            DEFAULT_WARNING_THRESHOLD,
+            DEFAULT_DANGER_THRESHOLD,
+        );
+        return Ok((
+            windows,
+            "источник: встроенные демо-данные".to_string(),
+            "demo".to_string(),
+        ));
+    }
+
+    let key = key_state.lock().unwrap().clone();
+    if key.is_empty() {
+        let windows = summarize_me(
+            &demo_payload(),
+            DEFAULT_WARNING_THRESHOLD,
+            DEFAULT_DANGER_THRESHOLD,
+        );
+        return Ok((
+            windows,
+            "источник: демо; сохраните VIBEMODE_API_KEY для live-лимитов".to_string(),
+            "demo".to_string(),
+        ));
+    }
+
+    let http = HttpClient::new(USER_AGENT_GUI)?;
+    let mut router = Router::new(
+        DEFAULT_API_BASE.to_string(),
+        api_fallbacks_for(DEFAULT_API_BASE, true),
+    );
+    let (payload, label) = http.fetch_me_with_retry(&key, &mut router, DEFAULT_API_BASE)?;
+    let windows = summarize_me(
+        &payload,
+        DEFAULT_WARNING_THRESHOLD,
+        DEFAULT_DANGER_THRESHOLD,
+    );
+    Ok((
+        windows,
+        format!("источник: live VibeMode /v1/me ({label})"),
+        label,
+    ))
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_apply_dashboard(
+    app: &AppWindow,
+    result: Result<(Vec<WindowState>, String, String), String>,
+) {
+    match result {
+        Ok((windows, source, endpoint)) => {
+            app.set_error_text("".into());
+            app.set_status_text(dashboard_status(&windows).into());
+            app.set_source_text(source.into());
+            app.set_active_endpoint_label(endpoint.into());
+            android_apply_window(app, "5h", windows.iter().find(|window| window.key == "5h"));
+            android_apply_window(
+                app,
+                "24h",
+                windows.iter().find(|window| window.key == "24h"),
+            );
+            android_apply_window(app, "7d", windows.iter().find(|window| window.key == "7d"));
+            android_apply_window(
+                app,
+                "30d",
+                windows.iter().find(|window| window.key == "30d"),
+            );
+        }
+        Err(error) => {
+            let msg = if error.contains("HTTP 401") {
+                "Проверьте VIBEMODE_API_KEY"
+            } else {
+                "Не удалось загрузить VibeMode"
+            };
+            app.set_error_text(msg.into());
+            app.set_status_text(msg.into());
+        }
+    }
+}
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+fn android_apply_window(app: &AppWindow, key: &str, window: Option<&WindowState>) {
+    let Some(window) = window else { return };
+    let level: SharedString = window.level.clone().into();
+    let reset: SharedString = window.reset.clone().into();
+    let credits: SharedString = metric_text("кредиты", window.credits.as_ref()).into();
+    let requests: SharedString = metric_text("запросы", window.requests.as_ref()).into();
+    let percent_text: SharedString = format_percent(window.percent).into();
+    let percent = window.percent as f32;
+    let peak =
+        peak_percent(window.credits.as_ref(), window.requests.as_ref()).unwrap_or(0.0) as f32;
+
+    match key {
+        "5h" => {
+            app.set_five_level(level);
+            app.set_five_reset(reset);
+            app.set_five_credits(credits);
+            app.set_five_requests(requests);
+            app.set_five_percent_text(percent_text);
+            app.set_five_percent(percent);
+            app.set_five_credit_percent(peak);
+            app.set_five_request_percent(peak);
+        }
+        "24h" => {
+            app.set_day_level(level);
+            app.set_day_reset(reset);
+            app.set_day_credits(credits);
+            app.set_day_requests(requests);
+            app.set_day_percent_text(percent_text);
+            app.set_day_percent(percent);
+            app.set_day_credit_percent(peak);
+            app.set_day_request_percent(peak);
+        }
+        "7d" => {
+            app.set_week_level(level);
+            app.set_week_reset(reset.clone());
+            app.set_week_credits(credits);
+            app.set_week_requests(requests);
+            app.set_week_percent_text(percent_text);
+            app.set_week_percent(percent);
+            app.set_week_credit_percent(peak);
+            app.set_week_request_percent(peak);
+            if let Some(metric) = window.credits.as_ref() {
+                app.set_donut_remaining(short_number(metric.remaining).into());
+                app.set_donut_limit(short_number(metric.limit).into());
+            }
+        }
+        "30d" => {
+            app.set_month_level(level);
+            app.set_month_reset(reset);
+            app.set_month_credits(credits);
+            app.set_month_requests(requests);
+            app.set_month_percent_text(percent_text);
+            app.set_month_percent(percent);
+            app.set_month_credit_percent(peak);
+            app.set_month_request_percent(peak);
+        }
+        _ => {}
+    }
 }
 
 pub const WINDOWS: [(&str, &str, &str, &str); 4] = [
