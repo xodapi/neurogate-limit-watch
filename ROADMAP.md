@@ -20,6 +20,33 @@ https://github.com/xodapi/vimit/discussions
 - Termux:Widget example that runs `vimit --demo` or `vimit --json`.
 - Optional Android notification through Termux:API.
 
+## Living Token Creature / Живое существо
+
+The overlay creature is meant to explain quota state without guilt or
+punishment mechanics. It reacts to token/credit spend, but it does not die and
+does not punish inactivity. When there is no spend for a while, it sleeps.
+
+Current implemented behavior:
+
+- `Sleeping`: no recent credit spend, muted color, slower pulse, no sounds.
+- `Awake`: normal spend below warning threshold, calm pulse.
+- `Alert`: warning threshold, amber state and faster motion.
+- `Critical`: danger threshold, red state and fastest motion.
+- `Recovery`: detected window reset, short visual "exhale" state.
+
+Planned improvements:
+
+- Low-motion and silent modes for distraction-sensitive users.
+- User-selectable behavior presets, sound themes, and creature skins.
+- Clear event model for sleep, wake, threshold crossing, and reset events.
+- Optional Android-friendly presentation that works as a notification/widget
+  first, then native overlay only if Android permissions and UX are safe.
+
+Русский: существо "питается" расходом токенов/кредитов, но не умирает и не
+голодает. При простое оно спокойно спит, при приближении к лимиту становится
+настороженным, при сбросе окна показывает короткий "выдох". Публичное описание
+не использует чужие товарные знаки.
+
 ## abtop / Agent Monitoring
 
 - Expand the new `--monitor` dashboard with ports/process panes when safe
