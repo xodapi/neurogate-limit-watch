@@ -1,4 +1,4 @@
-import { Button, ComboBox, CheckBox } from "std-widgets.slint";
+import { Button, ComboBox, CheckBox, LineEdit } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 component MeterBar inherits Rectangle {
@@ -391,16 +391,17 @@ component PulseOrganism inherits Rectangle {
 export component AppWindow inherits Window {
     title: "vimit-gui";
     in-out property <bool> is-overlay: false;
+    in-out property <bool> is-android: false;
     in-out property <bool> is-compact: false;
     in-out property <bool> overlay-pinned: true;
     in-out property <int> overlay-unit: 0;
     in-out property <int> overlay-reset-seconds: -1;
     in property <float> token-rate-raw: 0.0;
 
-    preferred-width: root.is-overlay ? (root.is-compact ? 260px : 340px) : 1120px;
-    preferred-height: root.is-overlay ? (root.is-compact ? 52px : 380px) : 720px;
-    min-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : 900px;
-    min-height: root.is-overlay ? (root.is-compact ? 48px : 340px) : 660px;
+    preferred-width: root.is-overlay ? (root.is-compact ? 260px : 340px) : root.is-android ? 420px : 1120px;
+    preferred-height: root.is-overlay ? (root.is-compact ? 52px : 380px) : root.is-android ? 760px : 720px;
+    min-width: root.is-overlay ? (root.is-compact ? 220px : 300px) : root.is-android ? 320px : 900px;
+    min-height: root.is-overlay ? (root.is-compact ? 48px : 340px) : root.is-android ? 520px : 660px;
     no-frame: root.is-overlay;
     always-on-top: root.is-overlay && root.overlay-pinned;
     background: root.is-overlay ? transparent : Theme.bg-primary;
@@ -414,6 +415,7 @@ export component AppWindow inherits Window {
     callback update-now();
     callback auto-update-changed(bool);
     callback auto-api-failover-changed(bool);
+    callback save-api-key(string);
     callback close-overlay();
     callback launch-mini-overlay();
     callback overlay-compact-changed(bool);
@@ -456,6 +458,8 @@ export component AppWindow inherits Window {
     in property <string> new-version-label: "";
     in-out property <bool> auto-update-check: true;
     in-out property <bool> auto-api-failover: true;
+    in-out property <string> api-key-input: "";
+    in-out property <bool> api-key-configured: false;
 
     in property <string> status-text: "Запуск...";
     in property <string> source-text: "источник: загрузка";
@@ -636,7 +640,7 @@ export component AppWindow inherits Window {
                             font-weight: 600;
                         }
 
-                        HorizontalLayout {
+                        if (!root.is-android) : HorizontalLayout {
                             spacing: 10px;
                             height: 34px;
 
@@ -663,15 +667,93 @@ export component AppWindow inherits Window {
 
                             Rectangle { }
                         }
+
+                        if (root.is-android) : VerticalLayout {
+                            spacing: 8px;
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Button {
+                                    text: "Обновить";
+                                    clicked => { root.refresh-requested(); }
+                                }
+
+                                Button {
+                                    text: "Демо";
+                                    clicked => { root.demo-requested(); }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Button {
+                                    text: "Мини-окно";
+                                    clicked => { root.launch-mini-overlay(); }
+                                }
+
+                                Button {
+                                    text: root.settings-open ? "Скрыть настройки" : "Настройки";
+                                    clicked => { root.settings-open = !root.settings-open; }
+                                }
+                            }
+                        }
                     }
 
                     Rectangle { }
                 }
             }
 
+            if (root.is-android) : Rectangle {
+                min-height: root.api-key-configured ? 112px : 146px;
+                background: Theme.bg-card;
+                border-radius: 10px;
+                border-color: Theme.border;
+                border-width: 1px;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+
+                    Text {
+                        text: root.api-key-configured ? "API key сохранён локально" : "Вставьте VIBEMODE API key";
+                        color: root.api-key-configured ? #7fb69c : Theme.text-primary;
+                        font-size: 16px;
+                        font-weight: 800;
+                        wrap: word-wrap;
+                    }
+
+                    LineEdit {
+                        text <=> root.api-key-input;
+                        placeholder-text: "VIBEMODE_API_KEY";
+                        input-type: InputType.password;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+
+                        Button {
+                            text: "Сохранить ключ";
+                            clicked => { root.save-api-key(root.api-key-input); }
+                        }
+
+                        Button {
+                            text: "Проверить";
+                            clicked => { root.refresh-requested(); }
+                        }
+                    }
+
+                    if (!root.api-key-configured) : Text {
+                        text: "Ключ хранится только в локальном файле приложения Android и не выводится в лог.";
+                        color: Theme.text-muted;
+                        font-size: 11px;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
             Rectangle {
                 visible: root.settings-open;
-                height: root.settings-open ? 270px : 0px;
+                height: root.settings-open ? (root.is-android ? 390px : 270px) : 0px;
                 background: Theme.bg-card;
                 border-radius: 8px;
                 border-color: Theme.border;
@@ -1009,8 +1091,8 @@ export component AppWindow inherits Window {
                 }
 
                 DonutChart {
-                    row: 0;
-                    col: 1;
+                    row: root.is-android ? 1 : 0;
+                    col: root.is-android ? 0 : 1;
                     remaining: root.donut-remaining;
                     total: root.donut-limit;
                     reset: root.week-reset;
@@ -1020,7 +1102,7 @@ export component AppWindow inherits Window {
                 }
 
                 LimitCard {
-                    row: 1;
+                    row: root.is-android ? 2 : 1;
                     col: 0;
                     name: "7d";
                     level: root.week-level;
@@ -1038,8 +1120,8 @@ export component AppWindow inherits Window {
                 }
 
                 LimitCard {
-                    row: 1;
-                    col: 1;
+                    row: root.is-android ? 3 : 1;
+                    col: root.is-android ? 0 : 1;
                     name: "30d";
                     level: root.month-level;
                     reset: root.month-reset;
