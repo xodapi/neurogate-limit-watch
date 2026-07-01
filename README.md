@@ -45,7 +45,7 @@ private prompts.
 - **Active endpoint failover**: automatically failover between API routers, displaying an active connection badge (`api`/`r-api`).
 - **Trend sparklines**: 15-day usage graphs rendered inside GUI quota cards.
 - **Stealth Mode**: mask sensitive numeric values with `***` in the GUI.
-- **Living overlay creature**: a floating, color-shifting quota indicator with compact/full modes, skin switching, pulse animation, and Windows sounds on level changes.
+- **Living overlay creature**: a floating, color-shifting quota indicator with compact/full modes, skin switching, pulse animation, Windows sounds on level changes, and calm sleep/recovery behavior instead of punishment mechanics.
 - **Multiple output modes**: human, JSON (`--json`), compact one-line (`--compact`).
 - **Live TUI monitor** (`--monitor`): ratatui dashboard with gauges, sparklines, color themes.
 - **Monitor presets**: `full` (2-column grid), `compact` (single-column), `mini` (one-liner).
