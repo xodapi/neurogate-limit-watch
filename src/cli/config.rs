@@ -25,6 +25,7 @@ pub struct Config {
     pub warning: Option<f64>,
     pub danger: Option<f64>,
     pub threshold: Option<String>,
+    pub auto_failover: Option<bool>,
 }
 
 impl Config {
@@ -118,6 +119,7 @@ impl Config {
             warning_threshold: self.warning(),
             danger_threshold: self.danger(),
             window_thresholds: self.window_thresholds()?,
+            auto_failover: self.auto_failover.unwrap_or(true),
         })
     }
 }
@@ -138,6 +140,7 @@ pub struct MergedConfig {
     pub warning_threshold: f64,
     pub danger_threshold: f64,
     pub window_thresholds: HashMap<String, (f64, f64)>,
+    pub auto_failover: bool,
 }
 
 fn default_config_path() -> Option<PathBuf> {
@@ -242,5 +245,13 @@ mod tests {
         assert_eq!(merged.danger_threshold, 90.0);
         assert!(!merged.demo);
         assert!(!merged.monitor);
+        assert!(merged.auto_failover);
+    }
+
+    #[test]
+    fn config_can_disable_auto_failover() {
+        let config: Config = toml::from_str("auto_failover = false").unwrap();
+        let merged = config.merge_with_defaults().unwrap();
+        assert!(!merged.auto_failover);
     }
 }

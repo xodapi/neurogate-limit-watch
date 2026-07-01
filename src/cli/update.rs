@@ -18,6 +18,8 @@ struct State {
     latest_available_version: Option<String>,
     #[serde(default = "default_true")]
     auto_update_check: bool,
+    #[serde(default = "default_true")]
+    auto_api_failover: bool,
 }
 
 impl Default for State {
@@ -26,6 +28,7 @@ impl Default for State {
             last_update_check: None,
             latest_available_version: None,
             auto_update_check: true,
+            auto_api_failover: true,
         }
     }
 }
@@ -194,5 +197,15 @@ pub fn is_auto_check_enabled() -> bool {
 pub fn set_auto_check_enabled(enabled: bool) {
     let mut state = load_state();
     state.auto_update_check = enabled;
+    save_state(&state);
+}
+
+pub fn is_auto_api_failover_enabled() -> bool {
+    load_state().auto_api_failover
+}
+
+pub fn set_auto_api_failover_enabled(enabled: bool) {
+    let mut state = load_state();
+    state.auto_api_failover = enabled;
     save_state(&state);
 }

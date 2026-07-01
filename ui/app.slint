@@ -410,6 +410,7 @@ export component AppWindow inherits Window {
     callback check-updates();
     callback update-now();
     callback auto-update-changed(bool);
+    callback auto-api-failover-changed(bool);
     callback close-overlay();
     callback launch-mini-overlay();
     callback overlay-compact-changed(bool);
@@ -450,6 +451,7 @@ export component AppWindow inherits Window {
     in property <int> api-offline-min: -1;
     in property <string> new-version-label: "";
     in-out property <bool> auto-update-check: true;
+    in-out property <bool> auto-api-failover: true;
 
     in property <string> status-text: "Запуск...";
     in property <string> source-text: "источник: загрузка";
@@ -665,7 +667,7 @@ export component AppWindow inherits Window {
 
             Rectangle {
                 visible: root.settings-open;
-                height: root.settings-open ? 230px : 0px;
+                height: root.settings-open ? 270px : 0px;
                 background: Theme.bg-card;
                 border-radius: 8px;
                 border-color: Theme.border;
@@ -966,7 +968,15 @@ export component AppWindow inherits Window {
                                     root.auto-update-check = !root.auto-update-check;
                                     root.auto-update-changed(root.auto-update-check);
                                 }
-            }
+                            }
+
+                            Button {
+                                text: root.auto-api-failover ? "✓ API failover: ВКЛ" : "✗ API failover: ВЫКЛ";
+                                clicked => {
+                                    root.auto-api-failover = !root.auto-api-failover;
+                                    root.auto-api-failover-changed(root.auto-api-failover);
+                                }
+                            }
         }
 
     }

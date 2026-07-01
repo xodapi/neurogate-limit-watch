@@ -2,7 +2,7 @@ use serde_json::Value;
 use std::fs;
 use std::time::{Duration, Instant};
 
-use crate::{DEFAULT_API_BASE, VPN_API_BASE, update_offline_state};
+use crate::{DEFAULT_API_BASE, FALLBACK_API_BASE, update_offline_state};
 
 pub struct Router {
     endpoints: Vec<String>,
@@ -16,9 +16,8 @@ pub struct Router {
 impl Router {
     pub fn new(initial_base: String, fallbacks: Vec<String>) -> Self {
         let mut endpoints = vec![initial_base];
-        let first = endpoints[0].clone();
         for fb in fallbacks {
-            if fb != first {
+            if !endpoints.iter().any(|endpoint| endpoint == &fb) {
                 endpoints.push(fb);
             }
         }
@@ -28,13 +27,13 @@ impl Router {
             failures: vec![0; count],
             degraded_until: vec![None; count],
             current: 0,
-            threshold: 3,
+            threshold: 1,
             cooldown: Duration::from_secs(60),
         }
     }
 
     pub fn default_fallbacks() -> Vec<String> {
-        vec![DEFAULT_API_BASE.to_string(), VPN_API_BASE.to_string()]
+        api_fallbacks_for(DEFAULT_API_BASE, true)
     }
 
     pub fn active_endpoint(&self) -> &str {
@@ -42,7 +41,10 @@ impl Router {
     }
 
     pub fn active_label(&self) -> &str {
-        let url = &self.endpoints[self.current];
+        Self::label_for_endpoint(&self.endpoints[self.current])
+    }
+
+    pub fn label_for_endpoint(url: &str) -> &str {
         if url.contains("r-api") {
             "r-api"
         } else if url.contains("api.vibe") {
@@ -55,6 +57,7 @@ impl Router {
     pub fn record_success(&mut self) {
         self.failures[self.current] = 0;
         self.degraded_until[self.current] = None;
+        self.current = 0;
     }
 
     pub fn record_failure(&mut self) -> bool {
@@ -79,6 +82,20 @@ impl Router {
                 return;
             }
         }
+    }
+}
+
+pub fn api_fallbacks_for(primary: &str, auto_failover: bool) -> Vec<String> {
+    if !auto_failover {
+        return Vec::new();
+    }
+    let normalized = primary.trim_end_matches('/');
+    if normalized == DEFAULT_API_BASE {
+        vec![FALLBACK_API_BASE.to_string()]
+    } else if normalized == FALLBACK_API_BASE {
+        vec![DEFAULT_API_BASE.to_string()]
+    } else {
+        Vec::new()
     }
 }
 
@@ -144,22 +161,19 @@ impl HttpClient {
         &self,
         api_key: &str,
         router: &mut Router,
-        api_base: &str,
+        _api_base: &str,
     ) -> Result<(Value, String), String> {
         let max_retries: u32 = 3;
         let base_delay_ms: u64 = 1000;
 
         for attempt in 0..=max_retries {
-            let endpoint = if attempt == 0 {
-                api_base
-            } else {
-                router.active_endpoint()
-            };
-            match self.fetch_me(api_key, endpoint) {
+            let endpoint = router.active_endpoint().to_string();
+            let label = Router::label_for_endpoint(&endpoint).to_string();
+            match self.fetch_me(api_key, &endpoint) {
                 Ok(value) => {
                     router.record_success();
                     update_offline_state(false);
-                    return Ok((value, router.active_label().to_string()));
+                    return Ok((value, label));
                 }
                 Err(error) => {
                     let is_retryable = is_retryable_error(&error);
@@ -212,4 +226,41 @@ pub fn load_mock(path: &str) -> Result<Value, String> {
         return Err("mock payload must be a JSON object".to_string());
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_fallbacks_prefer_api_then_r_api() {
+        let router = Router::new(DEFAULT_API_BASE.to_string(), Router::default_fallbacks());
+        assert_eq!(router.active_endpoint(), DEFAULT_API_BASE);
+        assert_eq!(router.active_label(), "api");
+    }
+
+    #[test]
+    fn router_fails_over_to_r_api_after_primary_failure() {
+        let mut router = Router::new(DEFAULT_API_BASE.to_string(), Router::default_fallbacks());
+        assert!(router.record_failure());
+        assert_eq!(router.active_endpoint(), FALLBACK_API_BASE);
+        assert_eq!(router.active_label(), "r-api");
+    }
+
+    #[test]
+    fn fallback_success_returns_to_primary_for_next_poll() {
+        let mut router = Router::new(DEFAULT_API_BASE.to_string(), Router::default_fallbacks());
+        router.record_failure();
+        assert_eq!(router.active_endpoint(), FALLBACK_API_BASE);
+        router.record_success();
+        assert_eq!(router.active_endpoint(), DEFAULT_API_BASE);
+    }
+
+    #[test]
+    fn auto_failover_can_be_disabled() {
+        assert!(api_fallbacks_for(DEFAULT_API_BASE, false).is_empty());
+        let mut router = Router::new(DEFAULT_API_BASE.to_string(), Vec::new());
+        assert!(router.record_failure());
+        assert_eq!(router.active_endpoint(), DEFAULT_API_BASE);
+    }
 }

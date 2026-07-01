@@ -39,8 +39,9 @@ pub fn get_offline_duration_min() -> Option<u64> {
         .map(|since| since.elapsed().as_secs() / 60)
 }
 
-pub const DEFAULT_API_BASE: &str = "https://r-api.vibemod.pro";
-pub const VPN_API_BASE: &str = "https://api.vibemod.pro";
+pub const DEFAULT_API_BASE: &str = "https://api.vibemod.pro";
+pub const FALLBACK_API_BASE: &str = "https://r-api.vibemod.pro";
+pub const VPN_API_BASE: &str = FALLBACK_API_BASE;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const USER_AGENT: &str = concat!("vimit/", env!("CARGO_PKG_VERSION"));
 pub const USER_AGENT_GUI: &str = concat!("vimit-gui/", env!("CARGO_PKG_VERSION"));
@@ -94,6 +95,7 @@ pub struct RuntimeConfig {
     pub api_base: String,
     pub api_key: String,
     pub abtop_bin: String,
+    pub auto_failover: bool,
 }
 
 impl RuntimeConfig {
@@ -113,6 +115,7 @@ impl RuntimeConfig {
             api_key: config_value(api_key_env, &dotenv).unwrap_or_default(),
             abtop_bin: config_value("ABTOP_BIN", &dotenv)
                 .unwrap_or_else(|| DEFAULT_ABTOP_BIN.to_string()),
+            auto_failover: true,
         })
     }
 }
