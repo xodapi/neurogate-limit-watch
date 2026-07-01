@@ -1724,6 +1724,22 @@ mod tests {
     }
 
     #[test]
+    fn gui_runtime_config_uses_selected_account_profile() {
+        let mut dotenv = HashMap::new();
+        dotenv.insert("VIBEMODE_ALT_KEY".to_string(), "test-key".to_string());
+        let account = Arc::new(Mutex::new(Some(GuiAccount {
+            api_key_env: Some("VIBEMODE_ALT_KEY".to_string()),
+            api_base: Some("https://account-api.example".to_string()),
+        })));
+
+        let config = runtime_config(&dotenv, &account, true);
+
+        assert_eq!(config.api_base, "https://account-api.example");
+        assert_eq!(config.api_key, "test-key");
+        assert!(config.auto_failover);
+    }
+
+    #[test]
     fn endpoint_label_maps_to_visible_api_url() {
         assert_eq!(
             endpoint_for_label("api", "https://custom.example"),
