@@ -7,15 +7,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg?style=flat-square)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](https://github.com/xodapi/vimit)
-[![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-CI%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
-**vimit** — один нативный бинарник для мониторинга лимитов VibeMode в реальном времени.
+**vimit** делает лимиты VibeMode наглядными: один нативный Rust-бинарник с CLI, TUI, GUI и floating overlay, где остаток кредитов пульсирует как живое существо.
 
 Опрашивает `GET /v1/me`, показывает расход credit/request по окнам (5ч / 24ч / 7д / 30д),
 рисует live TUI-дашборд (или JSON / compact), отправляет desktop-уведомления при
 достижении порогов, поддерживает несколько аккаунтов VibeMode.
 
 Не нужны Python, Node или SDK — только один исполняемый файл.
+
+## Демо
+
+![vimit floating overlay demo](docs/vmit_demo_scren.gif)
 
 ## Быстрый старт
 
@@ -40,6 +44,7 @@ vimit --doctor              # диагностика системы
 - **Отказоустойчивый роутер**: автоматический ретрай и failover между роутерами API с отображением статуса активного подключения (`api`/`r-api`).
 - **Спарклайны трендов**: визуализация 15-дневной истории использования лимитов прямо внутри GUI.
 - **Скрытый режим (Stealth Mode)**: скрытие точных числовых значений расходов с заменой на `***` в GUI.
+- **Живое overlay-существо**: floating-индикатор лимита с компактным/полным режимом, сменой скина, пульсацией, изменением цвета и Windows-звуками при смене уровня.
 - **Несколько режимов вывода**: human, JSON (`--json`), compact одной строкой (`--compact`).
 - **Live TUI-монитор** (`--monitor`): ratatui-дашборд с индикаторами, sparkline, цветовыми темами.
 - **Пресеты монитора**: `full` (сетка 2 колонки), `compact` (одна колонка), `mini` (одна строка).
@@ -53,7 +58,7 @@ vimit --doctor              # диагностика системы
 - **Диагностика** (`--doctor`): проверка конфига, аккаунтов, env, API.
 - **Мастер установки** (`--init`): интерактивное создание конфига, .env и API-ключа.
 - **30-дневные тренды** (`--trend`): история использования в redb, sparklines в TUI.
-- **GUI** (`--features gui`): desktop-приложение на Slint с графиками трендов, информативным тултипом в системном трее (с точным расходом квоты в процентах на mouse hover), полноценной иконкой приложения на панели задач Windows и разделом управления обновлениями в настройках.
+- **GUI** (`--features gui`): desktop-приложение на Slint с графиками трендов, выпадающим списком аккаунтов, информативным тултипом в системном трее (с точным расходом квоты в процентах на mouse hover), полноценной иконкой приложения на панели задач Windows, разделом управления обновлениями и floating overlay с живым существом.
 - **Безопасно**: API-ключ только из env, не логируется, нет телеметрии.
 
 ## Диагностика

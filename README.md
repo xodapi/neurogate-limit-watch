@@ -7,15 +7,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg?style=flat-square)](https://www.rust-lang.org)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=flat-square)](https://github.com/xodapi/vimit)
-[![Tests](https://img.shields.io/badge/tests-58%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-CI%20passing-brightgreen?style=flat-square)](https://github.com/xodapi/vimit/actions/workflows/ci.yml)
 
-**vimit** — single native binary to monitor VibeMode quota in real time.
+**vimit** gives your VibeMode quota a visual presence: one native Rust binary with CLI, TUI, GUI, and a floating overlay where remaining credits pulse as a living creature.
 
 Polls `GET /v1/me`, summarizes credit/request windows (5h / 24h / 7d / 30d),
 renders a live TUI dashboard (or JSON / compact text), sends desktop
 notifications on threshold breach, and supports multiple VibeMode accounts.
 
 No Python, Node, or SDK dependencies — just one executable.
+
+## Demo
+
+![vimit floating overlay demo](docs/vmit_demo_scren.gif)
 
 ## Quick Start
 
@@ -41,6 +45,7 @@ private prompts.
 - **Active endpoint failover**: automatically failover between API routers, displaying an active connection badge (`api`/`r-api`).
 - **Trend sparklines**: 15-day usage graphs rendered inside GUI quota cards.
 - **Stealth Mode**: mask sensitive numeric values with `***` in the GUI.
+- **Living overlay creature**: a floating, color-shifting quota indicator with compact/full modes, skin switching, pulse animation, and Windows sounds on level changes.
 - **Multiple output modes**: human, JSON (`--json`), compact one-line (`--compact`).
 - **Live TUI monitor** (`--monitor`): ratatui dashboard with gauges, sparklines, color themes.
 - **Monitor presets**: `full` (2-column grid), `compact` (single-column), `mini` (one-liner).
@@ -53,7 +58,7 @@ private prompts.
 - **abtop integration** (`--with-abtop`): merge local Codex/Claude agent status.
 - **Diagnostics** (`--doctor`): validate config, accounts, env, API connectivity.
 - **Setup wizard** (`--init`): interactive config, .env, and API key setup.
-- **GUI** (`--features gui`): Slint-based desktop window with stealth toggle, sparklines, informative system tray tooltip with exact usage percentages on hover, proper taskbar application icon on Windows, and updates configuration panel.
+- **GUI** (`--features gui`): Slint-based desktop window with stealth toggle, sparklines, account dropdown, informative system tray tooltip with exact usage percentages on hover, proper taskbar application icon on Windows, updates configuration panel, and floating creature overlay.
 - **Safe by design**: API key from env only, never logged, no telemetry.
 
 ## Download
