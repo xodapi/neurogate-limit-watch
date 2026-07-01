@@ -7,6 +7,9 @@ pub mod parse;
 pub use api::*;
 pub use parse::*;
 
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+slint::include_modules!();
+
 use chrono::{SecondsFormat, Utc};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -48,6 +51,16 @@ pub const USER_AGENT_GUI: &str = concat!("vimit-gui/", env!("CARGO_PKG_VERSION")
 pub const DEFAULT_WARNING_THRESHOLD: f64 = 75.0;
 pub const DEFAULT_DANGER_THRESHOLD: f64 = 90.0;
 pub const DEFAULT_ABTOP_BIN: &str = "abtop";
+
+#[cfg(all(target_os = "android", feature = "android-gui"))]
+#[unsafe(no_mangle)]
+pub fn android_main(app: slint::android::AndroidApp) {
+    slint::android::init(app).expect("cannot initialize Android backend");
+    AppWindow::new()
+        .expect("cannot initialize Slint window")
+        .run()
+        .expect("cannot run Slint window");
+}
 
 pub const WINDOWS: [(&str, &str, &str, &str); 4] = [
     (

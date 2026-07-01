@@ -20,6 +20,9 @@ name = "vimit-gui"
 path = "src/bin/vimit-gui.rs"
 required-features = ["gui"]
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [profile.release]
 opt-level = "z"
 lto = "thin"
